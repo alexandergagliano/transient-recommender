@@ -79,9 +79,6 @@ debug_*.py
 temp_*.py
 sandbox*.py
 
-# Email setup alternatives (keep only one)
-setup_sendgrid.md
-
 # Documentation drafts
 *_SUMMARY.md
 FIXES_*.md

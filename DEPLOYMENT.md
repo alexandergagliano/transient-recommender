@@ -1,7 +1,7 @@
-# 🚀 Transient Recommender Deployment Guide
-## Deploy to transientrecommender.org with One Click
+# 🚀 Transient Recommender - Linode VPS Deployment Guide
+## Deploy to Your Domain with Full Control
 
-This guide provides multiple options for deploying the Transient Recommender to your domain `transientrecommender.org`.
+This guide provides deployment options for the Transient Recommender on your Linode VPS server.
 
 ## ⚡ Quick Start (Recommended)
 
@@ -12,81 +12,86 @@ Run the deployment script:
 
 Choose your preferred deployment method and follow the interactive prompts!
 
-## 🎯 Deployment Options
+## 🎯 Linode VPS Deployment Options
 
-### 1. Railway.app (Easiest - Recommended)
+### 1. Docker Deployment (Recommended)
 
-**Why Railway:** One-click deployment, automatic SSL, easy domain setup, great for scientific applications.
-
-**Steps:**
-1. Push your code to GitHub
-2. Install Railway CLI: `npm install -g @railway/cli`
-3. Login: `railway login`
-4. Initialize: `railway init`
-5. Deploy: `railway up`
-6. Add custom domain in Railway dashboard: `transientrecommender.org`
-
-**Cost:** ~$5-20/month depending on usage
-
-### 2. Render.com (Alternative)
-
-**Why Render:** Simple, automatic SSL, good performance, scientific-friendly.
+**Why Docker:** Containerized, consistent environment, easy scaling, production-ready.
 
 **Steps:**
-1. Push code to GitHub
-2. Connect repository to Render.com
-3. Render auto-detects `render.yaml` configuration
-4. Add custom domain `transientrecommender.org` in dashboard
-
-**Cost:** ~$7-25/month
-
-### 3. DigitalOcean App Platform
-
-**Why DigitalOcean:** Reliable, good for data-heavy applications, flexible scaling.
-
-**Steps:**
-1. Push code to GitHub
-2. Create app in DigitalOcean App Platform
-3. Connect GitHub repository
-4. Add domain in app settings
-5. DigitalOcean handles SSL automatically
-
-**Cost:** ~$5-50/month
-
-### 4. Self-Hosted with Docker
-
-**Why Self-Host:** Full control, cost-effective for high usage, customizable.
-
-**Steps:**
-1. Get a VPS (DigitalOcean Droplet, AWS EC2, etc.)
-2. Clone repository to server
+1. Clone repository to your Linode server
+2. Ensure Docker and Docker Compose are installed
 3. Run: `docker-compose --profile production up -d`
-4. Configure DNS to point to your server
+4. Configure nginx for SSL and domain routing
 
-**Cost:** ~$5-20/month for VPS
+**Requirements:**
+- Linode VPS with Docker installed
+- Domain pointing to your server IP
+- SSL certificate (Let's Encrypt recommended)
 
-## 🌐 Domain Configuration
+### 2. Direct Python Deployment
+
+**Why Direct:** Full control, easier debugging, simpler for smaller deployments.
+
+**Steps:**
+1. Clone repository to your server
+2. Set up Python virtual environment
+3. Install dependencies: `pip install -r requirements.txt`
+4. Configure nginx as reverse proxy
+5. Use systemd for process management
+
+## 🌐 Domain & SSL Configuration
 
 ### DNS Setup
-Point your domain DNS to your deployment:
+Point your domain DNS to your Linode server:
 
-**For Cloud Providers (Railway, Render, etc.):**
-```
-Type: CNAME
-Name: transientrecommender.org
-Value: [provided by your cloud provider]
-```
-
-**For Self-Hosted:**
 ```
 Type: A
-Name: transientrecommender.org
-Value: [your server IP address]
+Name: yourdomain.com
+Value: [your Linode server IP address]
 ```
 
-### SSL/TLS
-- **Cloud providers:** Automatic SSL included
-- **Self-hosted:** Use Let's Encrypt or add SSL certificates to nginx
+### SSL/TLS with Let's Encrypt
+```bash
+# Install certbot
+sudo apt-get install certbot python3-certbot-nginx
+
+# Get SSL certificate
+sudo certbot --nginx -d yourdomain.com
+
+# Auto-renewal
+sudo crontab -e
+# Add: 0 12 * * * /usr/bin/certbot renew --quiet
+```
+
+## 🔧 Server Setup Prerequisites
+
+### System Requirements
+- **RAM:** 2GB minimum, 4GB recommended
+- **Storage:** 10GB minimum (for database and logs)
+- **CPU:** 1 core minimum, 2 cores recommended
+- **OS:** Ubuntu 20.04 LTS or newer
+
+### Install Dependencies
+```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+
+# Install Docker Compose
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+# Install nginx
+sudo apt install nginx -y
+
+# Install Python (if using direct deployment)
+sudo apt install python3 python3-pip python3-venv -y
+```
 
 ## 🔧 Environment Configuration
 
@@ -95,14 +100,15 @@ Value: [your server IP address]
 LOG_LEVEL=INFO
 FEATURE_BANK_PATH=data/feature_bank.csv
 PORT=8080
+SECRET_KEY=your-secret-key-here
 ```
 
 ### Production Optimizations
 - Use production database (included: `app.db`)
-- Configure proper logging
+- Configure proper logging with log rotation
 - Set up monitoring and alerts
 - Enable gzip compression (included in nginx config)
-- Set up backup strategy for database
+- Set up automated backup strategy
 
 ## 📊 Database Considerations
 
@@ -113,10 +119,16 @@ Your `app.db` file (299MB) contains:
 - Target lists and tags
 
 **Backup Strategy:**
-- Cloud providers: Use their backup services
-- Self-hosted: Regular database backups to cloud storage
+```bash
+# Daily database backup script
+#!/bin/bash
+DATE=$(date +%Y%m%d_%H%M%S)
+cp /path/to/app.db /backup/app_backup_$DATE.db
+# Keep only last 7 days
+find /backup -name "app_backup_*.db" -mtime +7 -delete
+```
 
-## 🚀 Performance Notes
+## 🚀 Performance Optimization
 
 **Current Setup Handles:**
 - 25,515 transient objects in feature bank
@@ -124,11 +136,11 @@ Your `app.db` file (299MB) contains:
 - File uploads (finder charts, audio notes)
 - Multiple concurrent users
 
-**Scaling Recommendations:**
-- Start with basic plan
-- Monitor CPU/memory usage
-- Scale up as user base grows
-- Consider database optimization for >100K objects
+**Linode Optimization:**
+- Use Linode's high-performance instances
+- Enable SSD storage for database
+- Configure nginx caching for static files
+- Monitor resource usage with Linode's monitoring tools
 
 ## 🛠️ Post-Deployment Checklist
 
@@ -140,53 +152,72 @@ Your `app.db` file (299MB) contains:
    - [ ] Audio notes
 
 2. **Security:**
-   - [ ] HTTPS enabled
-   - [ ] Security headers configured
-   - [ ] User data protection
+   - [ ] HTTPS enabled with Let's Encrypt
+   - [ ] Firewall configured (ufw)
+   - [ ] SSH key authentication
+   - [ ] Security headers configured in nginx
 
 3. **Performance:**
    - [ ] Page load times < 3 seconds
    - [ ] Database queries optimized
-   - [ ] Static files cached
+   - [ ] Static files cached and compressed
 
 4. **Monitoring:**
    - [ ] Error logging configured
    - [ ] Uptime monitoring
-   - [ ] Performance metrics
+   - [ ] Resource usage monitoring
+   - [ ] Backup automation
 
 ## 🆘 Troubleshooting
 
 ### Common Issues:
 
 **Domain not working:**
-- Check DNS propagation (24-48 hours)
-- Verify domain configuration in provider dashboard
+- Check DNS propagation: `nslookup yourdomain.com`
+- Verify nginx configuration: `sudo nginx -t`
+- Check firewall: `sudo ufw status`
 
 **Application errors:**
-- Check deployment logs
-- Verify environment variables
+- Check Docker logs: `docker-compose logs -f`
+- Verify file permissions
 - Ensure database file is accessible
 
 **Performance issues:**
-- Monitor resource usage
-- Scale up instance size
+- Monitor resource usage: `htop`, `df -h`
+- Check nginx access logs
 - Optimize database queries
 
-### Support Resources:
-- Railway: [docs.railway.app](https://docs.railway.app)
-- Render: [render.com/docs](https://render.com/docs)
-- DigitalOcean: [docs.digitalocean.com](https://docs.digitalocean.com)
+### Useful Commands:
+```bash
+# Check service status
+systemctl status nginx
+docker ps
 
-## 📈 Monitoring & Analytics
+# View logs
+tail -f /var/log/nginx/error.log
+docker-compose logs -f app
 
-Consider adding:
-- Application performance monitoring (APM)
-- User analytics (respecting privacy)
-- Error tracking (Sentry, Rollbar)
-- Uptime monitoring (UptimeRobot, Pingdom)
+# Restart services
+sudo systemctl restart nginx
+docker-compose restart
+```
+
+## 📈 Monitoring & Maintenance
+
+### Recommended Monitoring:
+- **System monitoring:** htop, netdata, or Prometheus
+- **Application logs:** centralized logging
+- **Uptime monitoring:** simple ping scripts or external services
+- **SSL certificate expiry:** certbot handles auto-renewal
+
+### Regular Maintenance:
+- Weekly system updates
+- Daily database backups
+- Monthly log cleanup
+- Quarterly security reviews
 
 ---
 
 **Ready to deploy?** Run `./deploy.sh` and follow the prompts!
 
-For questions or issues, check the deployment logs or consult the provider documentation. 
+For Linode-specific questions, consult [Linode's documentation](https://www.linode.com/docs/) or their community support. 
