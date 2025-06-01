@@ -4,7 +4,7 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for scientific packages
+# Install system dependencies for scientific packages and Kafka
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     liblapack-dev \
     libffi-dev \
     libssl-dev \
+    librdkafka-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
