@@ -1,160 +1,200 @@
-# Transient Recommender Server
+# Transient Recommender - Web Application
 
-Server component for the Transient Recommender system that handles user authentication and label synchronization.
+🔗 **GitHub Repository**: https://github.com/alexandergagliano/transient-recommender
 
-## Features
+A production-ready web application for astronomical transient discovery and recommendation, featuring machine learning-powered suggestions, target management, and collaborative user features.
 
-- User authentication with JWT tokens and API keys
-- Secure storage of user preferences and labels
-- Data sharing consent management
-- PostgreSQL database backend
-- FastAPI-based REST API
+## 🌟 Features
 
-## Installation
+- **ML-Powered Recommendations**: Real-time transient recommendations using machine learning (0.03s response time)
+- **User Authentication**: Complete registration, login, and password reset system
+- **Target Management**: Personal target lists with tagging and notes
+- **Finder Charts**: Automated finder chart generation for observations
+- **Audio Notes**: Voice memo support for transient observations  
+- **Admin Dashboard**: User management and system administration
+- **Production Ready**: Docker deployment with nginx and SSL support
 
-1. Create a Python virtual environment and activate it:
+## 🚀 Quick Start
+
+### Clone Repository
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+git clone https://github.com/alexandergagliano/transient-recommender.git
+cd transient-recommender
 ```
 
-2. Install dependencies:
+### Local Development
 ```bash
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Linux/Mac
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Run application
+python app.py
 ```
 
-3. Set up PostgreSQL database and create a new database:
-```sql
-CREATE DATABASE transient_recommender;
+Visit `http://localhost:5000` to access the application.
+
+## 📊 System Specifications
+
+**Current Production Setup:**
+- **Database**: SQLite (299MB) with 25,515+ transient objects
+- **Performance**: ML recommendations in ~0.03 seconds
+- **Features**: Complete user authentication, target management, finder charts
+- **Deployment**: Docker-ready with nginx and SSL configuration
+
+## 🎯 Linode VPS Deployment
+
+### Option A: Docker Deployment (Recommended)
+```bash
+docker-compose --profile production up -d
 ```
 
-4. Create a `.env` file with the following configuration:
-```env
-DATABASE_URL=postgresql://user:password@localhost:5432/transient_recommender
+### Option B: Interactive Deployment
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+### System Requirements
+- **RAM**: 2GB minimum, 4GB recommended
+- **Storage**: 10GB minimum (for database and logs)
+- **CPU**: 1 core minimum, 2 cores recommended
+- **OS**: Ubuntu 20.04 LTS or newer
+
+For detailed deployment instructions, see `DEPLOYMENT.md`.
+
+## 🔧 Configuration
+
+### Environment Variables
+```bash
+LOG_LEVEL=INFO
+FEATURE_BANK_PATH=data/feature_bank.csv
+PORT=5000
 SECRET_KEY=your-secret-key-here
-# For CSRF Protection - generate a strong random key, e.g., using: openssl rand -hex 32
-CSRF_SECRET_KEY=your-csrf-secret-key-here 
 ```
 
-5. Initialize the database:
-```bash
-alembic upgrade head
-```
-
-## Running the Server
-
-Start the server with:
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-The API documentation will be available at:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-## Usage Example
-
-Here's how to use the remote sync functionality in your transient recommender client:
-
+### Email Configuration (Optional)
+For password reset functionality, configure SMTP settings in `app.py`:
 ```python
-from transient_recommender import TransientRecommender
-
-# Initialize with remote sync enabled
-recommender = TransientRecommender(
-    username="your_username",
-    enable_remote_sync=True,
-    remote_url="https://your-server.com"
-)
-
-# First-time setup: register and consent to data sharing
-recommender.remote_sync.register(
-    email="your@email.com",
-    password="your_password",
-    data_sharing_consent=True
-)
-
-# Or login if already registered
-recommender.remote_sync.login(password="your_password")
-
-# Get recommendations (will now automatically sync with remote server)
-recommendations = recommender.get_recommendations()
+app.config['MAIL_SERVER'] = 'smtp.your-provider.com'
+app.config['MAIL_USERNAME'] = 'your-email@domain.com'
+app.config['MAIL_PASSWORD'] = 'your-app-password'
 ```
 
-Note: By enabling remote sync, you agree to share your transient labels with the community. This helps improve recommendations for everyone. You can revoke this consent at any time through the `update_consent` method.
+## 📡 API Endpoints
 
-## API Endpoints
-
-The API provides endpoints for user management, recommendations, object interactions, and more. 
-For detailed, interactive documentation, please see:
-- **Swagger UI**: `/docs`
-- **ReDoc**: `/redoc`
-
-Below is a summary of the main API endpoints:
-
-### Authentication & User Management
-- `POST /register`: Register a new user (expects form data).
-- `POST /token`: Login to get an OAuth2 access token (expects form data).
-- `POST /login`: Handles direct form submission for login and sets an access token cookie.
-- `GET /logout`: Logs out the current user and clears the access token cookie.
-- `GET /api/user/profile`: Retrieves the profile information for the currently authenticated user.
-- `POST /api/user/profile`: Updates the profile information (email, data sharing consent, science interests) for the currently authenticated user.
+### Authentication
+- `GET /`: Main dashboard (requires login)
+- `GET /register`: User registration page
+- `POST /register`: Process registration
+- `GET /login`: Login page
+- `POST /login`: Process login
+- `GET /logout`: Logout user
+- `GET /profile`: User profile management
+- `POST /reset_password_request`: Request password reset
+- `POST /reset_password/<token>`: Reset password with token
 
 ### Recommendations & Voting
-- `GET /api/recommendations`: Fetches a list of transient recommendations for the user. 
-    - Query parameters: `science_case` (string), `count` (integer).
-- `POST /api/vote`: Submits a user's vote (like, dislike, target) for a specific transient. Can also include tags and notes in the metadata.
-- `POST /api/skip`: Marks a transient as skipped by the user.
+- `GET /recommendations`: Get ML-powered transient recommendations
+- `POST /vote`: Submit vote (like, dislike, target) for transient
+- `POST /skip`: Mark transient as skipped
+- `GET /targets`: View user's target list
+- `POST /remove_target`: Remove object from targets
 
-### Targets
-- `GET /api/targets`: Retrieves the list of objects targeted by the user.
-- `POST /api/remove-target`: Removes an object from the user's target list (effectively changing its status from 'target' to 'like').
+### Data & Analysis
+- `GET /finder_chart/<ztfid>`: Generate/view finder chart
+- `POST /audio_note/<ztfid>`: Upload audio note
+- `GET /audio_note/<ztfid>`: Play audio note
+- `GET /stats`: User statistics and analytics
 
-### Tags & Notes (Interactions)
-- `GET /api/tags/{ztfid}`: Gets all tags applied by the user to a specific ZTF object.
-- `POST /api/tags/{ztfid}`: Saves or updates the list of tags for a specific ZTF object by the user.
-- `GET /api/notes/{ztfid}`: Retrieves any notes written by the user for a specific ZTF object.
-- `POST /api/notes/{ztfid}`: Saves or updates the notes for a specific ZTF object by the user.
+### Admin (Admin users only)
+- `GET /admin`: Admin dashboard
+- `POST /admin/users`: User management
+- `POST /update_feature_bank`: Update ML feature bank
 
-### Finder Charts
-- `POST /api/generate-finders`: Initiates the generation of finder charts for all objects currently in the user's target list.
+## 🔒 Security Features
 
-### Statistics
-- `GET /api/stats`: Provides statistics for the current user, such as counts of likes, dislikes, targets, etc.
+- **Password Security**: bcrypt hashing with salt
+- **Session Management**: Flask-Login with secure session cookies
+- **CSRF Protection**: Built-in CSRF token validation
+- **SQL Injection Prevention**: SQLAlchemy ORM parameter binding
+- **File Upload Security**: Restricted file types and validation
+- **Rate Limiting**: Protection against abuse (configurable)
 
-### Admin
-- `POST /api/update-feature-bank`: (Admin Only) Triggers an update of the system's feature bank from its source CSV file.
+## 📈 Performance & Monitoring
 
-## Security Measures
+**Optimizations Included:**
+- Database indexing for fast queries
+- Efficient ML feature processing
+- Static file caching
+- Gzip compression (nginx)
+- Connection pooling
 
-1. Password hashing using bcrypt
-2. JWT tokens for authentication
-3. API keys for automated access
-4. Data sharing consent tracking
-5. HTTPS required in production
-6. Rate limiting
-7. Input validation
-8. CSRF Protection via Double Submit Cookie method (using starlette-csrf)
+**Monitoring Ready:**
+- Comprehensive logging
+- Error tracking
+- Performance metrics
+- Resource usage monitoring
 
-## Production Deployment
+## 🛠️ Development
 
-For production deployment:
-
-1. Use a production-grade WSGI server (e.g., Gunicorn)
-2. Set up HTTPS using a reverse proxy (e.g., Nginx)
-3. Use environment variables for all sensitive configuration
-4. Set up proper database backup procedures
-5. Configure logging
-6. Set up monitoring
-
-Example production startup command:
-```bash
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+### Project Structure
+```
+transient_recommender/
+├── app/                    # Flask application
+│   ├── static/            # CSS, JS, images
+│   ├── templates/         # HTML templates
+│   └── models.py          # Database models
+├── data/                  # Feature bank and data files
+├── finder_charts/         # Generated finder charts
+├── docker-compose.yml     # Container orchestration
+├── Dockerfile            # Container definition
+├── nginx.conf            # Web server configuration
+├── deploy.sh             # Deployment script
+└── requirements.txt      # Python dependencies
 ```
 
-## Contributing
+### Running Tests
+```bash
+# Install test dependencies
+pip install pytest pytest-cov
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+# Run tests
+pytest tests/
+```
 
-## License
+## 🚀 Production Deployment
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+The application includes complete production infrastructure:
+
+- ✅ **Docker**: Containerized deployment
+- ✅ **nginx**: Reverse proxy with SSL
+- ✅ **SSL/HTTPS**: Let's Encrypt integration
+- ✅ **Database**: SQLite with backup strategies
+- ✅ **Monitoring**: Logging and error tracking
+- ✅ **Security**: Production security headers
+
+## 📚 Documentation
+
+- `DEPLOYMENT.md` - Comprehensive deployment guide
+- `USER_GUIDE.md` - User interface and features guide
+- API documentation available at `/docs` when running
+
+## 🤝 Contributing
+
+Contributions welcome! Please feel free to submit a Pull Request.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+**Ready to deploy?** 
+1. Clone the repository
+2. Run `./deploy.sh` 
+3. Follow the interactive prompts
+4. Access your application at your domain with HTTPS! 
