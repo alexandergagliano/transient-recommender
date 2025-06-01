@@ -1434,10 +1434,13 @@ function updateObjectDisplay() {
     objectId.textContent = ztfid;
     objectDetails.textContent = `RA: ${object.ra?.toFixed(4) || 'N/A'}, Dec: ${object.dec?.toFixed(4) || 'N/A'}`;
 
-    // Update iframe with ALeRCE link
+    // Update iframe with ALeRCE link (with CORS-friendly attributes)
     mainViewer.innerHTML = `
         <iframe src="https://alerce.online/object/${ztfid}" 
-                style="width: 100%; height: 100%; border: none;">
+                style="width: 100%; height: 100%; border: none;"
+                referrerpolicy="no-referrer-when-downgrade"
+                allow="web-share"
+                loading="eager">
         </iframe>
     `;
 

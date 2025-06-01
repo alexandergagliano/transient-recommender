@@ -10,7 +10,7 @@ services:
       - FEATURE_BANK_PATH=data/feature_bank.csv
     volumes:
       - ./data:/app/data:ro
-      # - ./app.db:/app/app.db  # Temporarily disabled due to mount issue
+      - ./app.db:/app/app.db
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
