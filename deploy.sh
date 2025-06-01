@@ -47,7 +47,7 @@ case $choice in
         docker-compose build
         
         echo "Starting services..."
-        docker-compose --profile production up -d
+        docker-compose up -d
         
         echo "Services started successfully!"
         echo "Application running on port 8080"
