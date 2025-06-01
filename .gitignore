@@ -61,6 +61,11 @@ logs/
 # Database
 *.db-journal
 test.db
+app.db
+
+# Data files (too large for GitHub)
+data/feature_bank.csv
+data/*.csv
 
 # Temporary files
 *.tmp
