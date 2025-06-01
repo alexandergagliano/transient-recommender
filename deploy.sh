@@ -1,65 +1,44 @@
 #!/bin/bash
 
-# Transient Recommender One-Click Deployment Script
+# Transient Recommender Linode VPS Deployment Script
 # For transientrecommender.org
 
 set -e
 
-echo "🚀 Transient Recommender Deployment Setup"
-echo "=========================================="
+echo "Transient Recommender - Linode VPS Deployment"
+echo "=============================================="
 
 # Check if we're in the right directory
 if [ ! -f "app/main.py" ]; then
-    echo "❌ Error: Please run this script from the transient_recommender_server directory"
+    echo "Error: Please run this script from the transient_recommender_server directory"
     exit 1
 fi
 
-echo "📋 Choose your deployment method:"
-echo "1) Railway.app (Recommended - Easy)"
-echo "2) Render.com (Alternative)"
-echo "3) DigitalOcean App Platform"
-echo "4) Docker Compose (Self-hosted)"
-echo "5) Local testing"
+echo "Choose your deployment method:"
+echo "1) Docker Compose (Recommended)"
+echo "2) Manual Python deployment"
+echo "3) Local testing"
 
-read -p "Enter your choice (1-5): " choice
+read -p "Enter your choice (1-3): " choice
 
 case $choice in
     1)
-        echo "🚂 Setting up Railway.app deployment..."
-        echo ""
-        echo "1. Install Railway CLI: npm install -g @railway/cli"
-        echo "2. Login: railway login"
-        echo "3. Create project: railway init"
-        echo "4. Deploy: railway up"
-        echo "5. Add custom domain in Railway dashboard: transientrecommender.org"
-        echo ""
-        echo "Railway config file: railway.toml (already created)"
-        ;;
-    2)
-        echo "🎨 Setting up Render.com deployment..."
-        echo ""
-        echo "1. Push code to GitHub"
-        echo "2. Connect GitHub repo to Render.com"
-        echo "3. Render will automatically use render.yaml config"
-        echo "4. Add custom domain transientrecommender.org in Render dashboard"
-        echo ""
-        echo "Render config file: render.yaml (already created)"
-        ;;
-    3)
-        echo "🌊 Setting up DigitalOcean App Platform..."
-        echo ""
-        echo "1. Push code to GitHub"
-        echo "2. Create app in DigitalOcean App Platform"
-        echo "3. Connect GitHub repo"
-        echo "4. DigitalOcean will auto-detect Dockerfile"
-        echo "5. Add domain transientrecommender.org in app settings"
-        ;;
-    4)
-        echo "🐳 Setting up Docker Compose (self-hosted)..."
+        echo "Setting up Docker Compose deployment..."
         
         # Check if Docker is installed
         if ! command -v docker &> /dev/null; then
-            echo "❌ Docker is not installed. Please install Docker first."
+            echo "Docker is not installed. Installing Docker..."
+            echo "Run these commands:"
+            echo "sudo apt update && sudo apt install -y docker.io docker-compose"
+            echo "sudo systemctl start docker && sudo systemctl enable docker"
+            echo "sudo usermod -aG docker \$USER"
+            echo "Then log out and back in, and run this script again."
+            exit 1
+        fi
+        
+        # Check if Docker Compose is installed
+        if ! command -v docker-compose &> /dev/null; then
+            echo "Docker Compose not found. Please install it first."
             exit 1
         fi
         
@@ -68,22 +47,41 @@ case $choice in
         docker-compose build
         
         echo "Starting services..."
-        docker-compose up -d
+        docker-compose --profile production up -d
         
-        echo "✅ Services started!"
-        echo "🌐 Visit: http://localhost:8080"
+        echo "Services started successfully!"
+        echo "Application running on port 8080"
         echo ""
-        echo "To set up domain transientrecommender.org:"
-        echo "1. Point your DNS A record to your server IP"
-        echo "2. Use nginx proxy (config included in docker-compose.yml)"
+        echo "Next steps:"
+        echo "1. Point transientrecommender.org DNS to this server's IP"
+        echo "2. Configure nginx reverse proxy for SSL/domain routing"
+        echo "3. Visit: http://your-server-ip:8080"
         ;;
-    5)
-        echo "🧪 Starting local testing environment..."
+    2)
+        echo "Setting up manual Python deployment..."
+        
+        # Create virtual environment if needed
+        if [ ! -d ".venv" ]; then
+            echo "Creating virtual environment..."
+            python3 -m venv .venv
+        fi
+        
+        echo "Installing dependencies..."
+        source .venv/bin/activate
+        pip install -r requirements.txt
+        
+        echo "Starting application..."
+        echo "Application will run on port 5000"
+        echo "Press Ctrl+C to stop"
+        python app.py
+        ;;
+    3)
+        echo "Starting local testing environment..."
         
         # Install dependencies if needed
         if [ ! -d ".venv" ]; then
             echo "Creating virtual environment..."
-            python -m venv .venv
+            python3 -m venv .venv
             source .venv/bin/activate
             pip install -r requirements.txt
         else
@@ -91,20 +89,20 @@ case $choice in
         fi
         
         echo "Starting development server..."
-        python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
+        python app.py
         ;;
     *)
-        echo "❌ Invalid choice"
+        echo "Invalid choice"
         exit 1
         ;;
 esac
 
 echo ""
-echo "🔧 Additional Setup Notes:"
-echo "========================="
-echo "• Make sure your app.db file contains your data"
-echo "• Update domain DNS settings to point to your deployment"
-echo "• Consider setting up SSL/TLS for production"
-echo "• Monitor logs and performance after deployment"
+echo "Setup Notes:"
+echo "============"
+echo "• Database: app.db contains your transient data"
+echo "• DNS: Point transientrecommender.org to your server IP"
+echo "• SSL: Use nginx with Let's Encrypt for HTTPS"
+echo "• Monitoring: Check logs with 'docker-compose logs' (Docker) or application logs"
 echo ""
-echo "📞 Need help? Check the documentation or deployment logs" 
+echo "For nginx configuration and SSL setup, see DEPLOYMENT.md" 
