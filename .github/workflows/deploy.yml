@@ -35,7 +35,7 @@ jobs:
         
     - name: Test database models
       run: |
-        python -c "from app.models import User, Vote, Interaction; print('✅ Models import successfully')"
+        python -c "from app.models import User, Vote, Tag, Note; print('✅ Models import successfully')"
 
   docker-build:
     needs: test
