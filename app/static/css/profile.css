@@ -1,0 +1,15 @@
+/* Styles for the User Profile page */
+
+.profile-container {
+    /* Add specific styles if needed */
+}
+
+#profile-message.success-message {
+    color: green;
+    font-weight: bold;
+}
+
+#profile-message.error-message {
+    color: red;
+    font-weight: bold;
+} 

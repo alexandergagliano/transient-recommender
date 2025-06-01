@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+
+{% block title %}My Targets - Transient Recommender{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', path='/css/targets.css') }}"> 
+{% endblock %}
+
+{% block content %}
+<div class="target-page-container">
+    <header class="mb-4">
+        <h1>My Targets</h1>
+        <p class="text-muted">Click the target list icon on the right to view and manage your targets.</p>
+    </header>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Target Management</h5>
+                </div>
+                <div class="card-body">
+                    <p>Your targets are displayed in a table below. You can:</p>
+                    <ul>
+                        <li>View target coordinates and details</li>
+                        <li>Remove targets from your list</li>
+                        <li>Generate finder charts for all targets</li>
+                        <li>Save your target list as a text file</li>
+                    </ul>
+                    
+                    <div class="mt-3">
+                        <button class="btn btn-primary me-2" id="generateFindersButtonPage" onclick="generateFinderChartsTargetsPage()">
+                            <i class="bi bi-camera"></i> Generate Finder Charts
+                        </button>
+                    </div>
+                    
+                    <div id="target-stats" class="mt-4">
+                        <h6>Target Statistics</h6>
+                        <div id="stats-content">
+                            <p class="text-muted">Loading statistics...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6>Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <a href="{{ url_for('recommendations_page') }}" class="btn btn-outline-primary w-100 mb-2">
+                        <i class="bi bi-plus-circle"></i> Add More Targets
+                    </a>
+                    <a href="{{ url_for('history_page') }}" class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-clock-history"></i> View History
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Target List Display -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>My Targets (<span id="targetCountTargetsPage">0</span>)</h5>
+            </div>
+            <div class="card-body">
+                <div id="targetListTargetsPage" class="target-list-table">
+                    <!-- Target items will be populated here by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', path='/js/targets.js') }}"></script>
+<script>
+    // Function to open the target sidebar
+    function openTargetSidebar() {
+        const sidebar = document.getElementById('targetSidebarTargetsPage');
+        if (sidebar) {
+            sidebar.classList.add('open');
+        }
+    }
+    
+    // Add a specific handler for the generate finders button on this page
+    async function generateFinderChartsTargetsPage() {
+        // This function can call a global one if available, or be specific to targets.js
+        if (typeof generateFinderCharts === "function") {
+            generateFinderCharts(); // Call if global function exists in app.js or similar
+        } else {
+            // Fallback implementation
+            showToast('Triggering finder chart generation...', 'info');
+            try {
+                const response = await fetch('/api/generate-finders', { method: 'POST' });
+                if(response.ok) {
+                    const result = await response.json();
+                    showToast(result.message || 'Finder chart generation started.', 'success');
+                } else {
+                    showToast('Failed to start finder chart generation.', 'error');
+                }
+            } catch (error) {
+                showToast('Error contacting server for finder charts.', 'error');
+            }
+        }
+    }
+    
+    // Load target statistics
+    async function loadTargetStats() {
+        try {
+            console.log('Loading target stats...');
+            const response = await fetch('/api/stats', {
+                credentials: 'include' // Ensure cookies are sent
+            });
+            
+            console.log('Stats response status:', response.status);
+            
+            if (response.ok) {
+                const stats = await response.json();
+                console.log('Stats loaded successfully:', stats);
+                const statsContent = document.getElementById('stats-content');
+                if (statsContent) {
+                    statsContent.innerHTML = `
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h4 class="text-warning">${stats.targets}</h4>
+                                    <small>Targets</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h4 class="text-success">${stats.likes}</h4>
+                                    <small>Likes</small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            } else if (response.status === 401) {
+                console.warn('User not authenticated, cannot load stats');
+                const statsContent = document.getElementById('stats-content');
+                if (statsContent) {
+                    statsContent.innerHTML = '<p class="text-muted">Please log in to view statistics</p>';
+                }
+            } else {
+                console.error('Failed to load stats:', response.status, response.statusText);
+                const statsContent = document.getElementById('stats-content');
+                if (statsContent) {
+                    statsContent.innerHTML = '<p class="text-muted">Unable to load statistics</p>';
+                }
+            }
+        } catch (error) {
+            console.error('Error loading stats:', error);
+            const statsContent = document.getElementById('stats-content');
+            if (statsContent) {
+                statsContent.innerHTML = '<p class="text-muted">Error loading statistics</p>';
+            }
+        }
+    }
+    
+    // No sidebar setup needed for targets page
+    
+    // Update target list for targets page
+    async function updateTargetListTargetsPage() {
+        try {
+            console.log('🎯 Loading targets for targets page...');
+            
+            const response = await fetch('/api/targets', {
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                console.error('Failed to load targets:', response.status);
+                return;
+            }
+            
+            const targets = await response.json();
+            console.log('🎯 Loaded targets:', targets.length);
+            
+            // Update the targets page table
+            const targetListContainer = document.getElementById('targetListTargetsPage');
+            const targetCountElement = document.getElementById('targetCountTargetsPage');
+            
+            if (targetListContainer) {
+                if (targets.length === 0) {
+                    targetListContainer.innerHTML = '<p class="text-muted text-center">No targets yet. Go to the Recommendations page to add some!</p>';
+                } else {
+                    targetListContainer.innerHTML = `
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>ZTFID</th>
+                                        <th>RA</th>
+                                        <th>Dec</th>
+                                        <th>Magnitude</th>
+                                        <th>Added</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${targets.map(target => `
+                                        <tr>
+                                            <td>
+                                                <a href="https://alerce.online/object/${target.ztfid}" target="_blank" class="text-decoration-none">
+                                                    ${target.ztfid}
+                                                </a>
+                                            </td>
+                                            <td>${target.ra?.toFixed(5) || 'N/A'}</td>
+                                            <td>${target.dec?.toFixed(5) || 'N/A'}</td>
+                                            <td>${target.latest_magnitude?.toFixed(2) || 'N/A'}</td>
+                                            <td>${target.created_at ? new Date(target.created_at).toLocaleDateString() : 'N/A'}</td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-danger" onclick="removeTargetFromTargetsPage('${target.ztfid}')" title="Remove from targets">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                }
+            }
+            
+            // Update target count
+            if (targetCountElement) {
+                targetCountElement.textContent = targets.length;
+            }
+            
+        } catch (error) {
+            console.error('Error loading targets for targets page:', error);
+        }
+    }
+    
+    // Remove target function specific to targets page
+    async function removeTargetFromTargetsPage(ztfid) {
+        try {
+            console.log('🎯 Removing target from targets page:', ztfid);
+            
+            const response = await fetch('/api/remove-target', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ ztfid: ztfid }),
+                credentials: 'include'
+            });
+            
+            if (response.ok) {
+                console.log('✅ Target removed successfully');
+                // Refresh both the sidebar and stats
+                await updateTargetListTargetsPage();
+                await loadTargetStats();
+                
+                // Also call the global function if it exists to update other parts
+                if (typeof updateTargetList === 'function') {
+                    updateTargetList();
+                }
+            } else {
+                console.error('❌ Failed to remove target:', response.status);
+            }
+        } catch (error) {
+            console.error('❌ Error removing target:', error);
+        }
+    }
+
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', () => {
+        // Add small delays to ensure page is fully loaded and authentication is available
+        setTimeout(() => {
+            loadTargetStats();
+        }, 150);
+        
+
+        
+        // Load targets into the table
+        setTimeout(() => {
+            updateTargetListTargetsPage();
+        }, 200);
+    });
+</script>
+{% endblock %} 

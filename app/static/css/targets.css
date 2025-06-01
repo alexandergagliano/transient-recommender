@@ -1,0 +1,26 @@
+/* Styles for the My Targets page */
+
+.target-page-container {
+    /* Add specific styles if needed */
+}
+
+.target-list {
+    list-style-type: none;
+    padding: 0;
+}
+
+.target-item {
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    background-color: #f9f9f9;
+}
+
+.target-item strong {
+    color: #333;
+}
+
+.target-item .remove-button {
+    float: right;
+} 

@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+
+{% block title %}History - Transient Recommender{% endblock %}
+
+{% block content %}
+<div class="history-container">
+    <div class="row mb-3">
+        <div class="col-md-8">
+            <h2><i class="fas fa-history"></i> Your Interaction History</h2>
+            <p class="text-muted">A complete record of your interactions with transient objects</p>
+        </div>
+        <div class="col-md-4">
+            <div class="d-flex gap-2">
+                <select id="historyFilter" class="form-select">
+                    <option value="all">All Interactions</option>
+                    <option value="like">Liked Objects</option>
+                    <option value="dislike">Disliked Objects</option>
+                    <option value="target">Targeted Objects</option>
+                    <option value="skip">Skipped Objects</option>
+                    <option value="comment">Commented Objects</option>
+                    <option value="audio">Audio Notes</option>
+                    <option value="tag">Tagged Objects</option>
+                </select>
+                <button id="refreshHistory" class="btn btn-outline-primary">
+                    <i class="fas fa-refresh"></i> Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-success" id="likeCount">0</h5>
+                    <p class="card-text small">Liked</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-danger" id="dislikeCount">0</h5>
+                    <p class="card-text small">Disliked</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-warning" id="targetCount">0</h5>
+                    <p class="card-text small">Targeted</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-secondary" id="skipCount">0</h5>
+                    <p class="card-text small">Skipped</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-info" id="commentCount">0</h5>
+                    <p class="card-text small">Comments</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-primary" id="audioCount">0</h5>
+                    <p class="card-text small">Audio Notes</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Timeline -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-timeline"></i> Interaction Timeline
+                <span id="historyCount" class="badge bg-secondary ms-2">0</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <div id="loadingHistory" class="text-center py-4" style="display: none;">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading history...</span>
+                </div>
+                <p class="mt-2">Loading your interaction history...</p>
+            </div>
+            
+            <div id="historyTimeline" class="timeline">
+                <!-- History items will be populated here -->
+            </div>
+            
+            <div id="noHistory" class="text-center py-4" style="display: none;">
+                <i class="fas fa-history fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No interactions yet</h5>
+                <p class="text-muted">Start exploring transients to build your history!</p>
+                <a href="/recommendations" class="btn btn-primary">
+                    <i class="fas fa-star"></i> View Recommendations
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #dee2e6;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    margin-left: 15px;
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -23px;
+    top: 20px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: white;
+    border: 3px solid #6c757d;
+}
+
+.timeline-item.like::before { border-color: #28a745; }
+.timeline-item.dislike::before { border-color: #dc3545; }
+.timeline-item.target::before { border-color: #ffc107; }
+.timeline-item.skip::before { border-color: #6c757d; }
+.timeline-item.comment::before { border-color: #17a2b8; }
+.timeline-item.audio::before { border-color: #007bff; }
+.timeline-item.tag::before { border-color: #6f42c1; }
+
+.timeline-header {
+    display: flex;
+    justify-content: between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.timeline-icon {
+    margin-right: 8px;
+}
+
+.timeline-ztfid {
+    font-weight: bold;
+    color: #007bff;
+    text-decoration: none;
+}
+
+.timeline-ztfid:hover {
+    text-decoration: underline;
+}
+
+.timeline-timestamp {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.timeline-content {
+    color: #495057;
+}
+
+.timeline-meta {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 8px;
+}
+
+.interaction-badge {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    loadHistory();
+    
+    // Set up filter change handler
+    const historyFilter = document.getElementById('historyFilter');
+    if (historyFilter) {
+        historyFilter.addEventListener('change', loadHistory);
+    }
+    
+    // Set up refresh button
+    const refreshButton = document.getElementById('refreshHistory');
+    if (refreshButton) {
+        refreshButton.addEventListener('click', loadHistory);
+    }
+});
+
+async function loadHistory() {
+    const loadingElement = document.getElementById('loadingHistory');
+    const timelineElement = document.getElementById('historyTimeline');
+    const noHistoryElement = document.getElementById('noHistory');
+    const filter = document.getElementById('historyFilter')?.value || 'all';
+    
+    loadingElement.style.display = 'block';
+    timelineElement.style.display = 'none';
+    noHistoryElement.style.display = 'none';
+    
+    try {
+        const response = await fetch(`/api/history?filter=${filter}`);
+        if (!response.ok) {
+            throw new Error(`Error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        displayHistory(data.history);
+        updateStatistics(data.statistics);
+        
+    } catch (error) {
+        console.error('Error loading history:', error);
+        showToast('Error loading history. Please try again.', 'error');
+    } finally {
+        loadingElement.style.display = 'none';
+    }
+}
+
+function displayHistory(history) {
+    const timelineElement = document.getElementById('historyTimeline');
+    const noHistoryElement = document.getElementById('noHistory');
+    const historyCountElement = document.getElementById('historyCount');
+    
+    if (!history || history.length === 0) {
+        timelineElement.style.display = 'none';
+        noHistoryElement.style.display = 'block';
+        historyCountElement.textContent = '0';
+        return;
+    }
+    
+    historyCountElement.textContent = history.length;
+    timelineElement.innerHTML = '';
+    
+    history.forEach(item => {
+        const timelineItem = createTimelineItem(item);
+        timelineElement.appendChild(timelineItem);
+    });
+    
+    timelineElement.style.display = 'block';
+    noHistoryElement.style.display = 'none';
+}
+
+function createTimelineItem(item) {
+    const div = document.createElement('div');
+    div.className = `timeline-item ${item.type}`;
+    
+    const icon = getInteractionIcon(item.type);
+    const description = getInteractionDescription(item);
+    const timestamp = formatTimestamp(item.timestamp);
+    
+    div.innerHTML = `
+        <div class="timeline-header">
+            <div>
+                <span class="timeline-icon">${icon}</span>
+                <a href="/recommendations?ztfid=${item.ztfid}" class="timeline-ztfid" target="_blank">${item.ztfid}</a>
+                <span class="interaction-badge badge bg-${getBadgeColor(item.type)}">${item.type}</span>
+            </div>
+            <span class="timeline-timestamp">${timestamp}</span>
+        </div>
+        <div class="timeline-content">${description}</div>
+        ${item.science_case ? `<div class="timeline-meta">Science case: <strong>${item.science_case}</strong></div>` : ''}
+    `;
+    
+    return div;
+}
+
+function getInteractionIcon(type) {
+    const icons = {
+        'like': '<i class="fas fa-thumbs-up text-success"></i>',
+        'dislike': '<i class="fas fa-thumbs-down text-danger"></i>',
+        'target': '<i class="fas fa-crosshairs text-warning"></i>',
+        'skip': '<i class="fas fa-forward text-secondary"></i>',
+        'comment': '<i class="fas fa-comment text-info"></i>',
+        'audio': '<i class="fas fa-microphone text-primary"></i>',
+        'tag': '<i class="fas fa-tag text-purple"></i>'
+    };
+    return icons[type] || '<i class="fas fa-circle"></i>';
+}
+
+function getBadgeColor(type) {
+    const colors = {
+        'like': 'success',
+        'dislike': 'danger',
+        'target': 'warning',
+        'skip': 'secondary',
+        'comment': 'info',
+        'audio': 'primary',
+        'tag': 'dark'
+    };
+    return colors[type] || 'secondary';
+}
+
+function getInteractionDescription(item) {
+    switch (item.type) {
+        case 'like':
+            return 'You liked this transient object';
+        case 'dislike':
+            return 'You disliked this transient object';
+        case 'target':
+            return 'You added this object to your target list';
+        case 'skip':
+            return 'You skipped this object';
+        case 'comment':
+            return `You commented: "${item.content}"`;
+        case 'audio':
+            return 'You recorded an audio note for this object';
+        case 'tag':
+            return `You tagged this object with: ${item.content}`;
+        default:
+            return 'You interacted with this object';
+    }
+}
+
+function updateStatistics(stats) {
+    document.getElementById('likeCount').textContent = stats.like || 0;
+    document.getElementById('dislikeCount').textContent = stats.dislike || 0;
+    document.getElementById('targetCount').textContent = stats.target || 0;
+    document.getElementById('skipCount').textContent = stats.skip || 0;
+    document.getElementById('commentCount').textContent = stats.comment || 0;
+    document.getElementById('audioCount').textContent = stats.audio || 0;
+}
+
+function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+}
+
+// Toast function (simplified version)
+function showToast(message, type = 'info') {
+    // Simple alert for now - could be enhanced with proper toast system
+    alert(message);
+}
+</script>
+{% endblock %} 

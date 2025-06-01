@@ -1,0 +1,1024 @@
+{% extends "base.html" %}
+
+{% block title %}Recommendations - Transient Recommender{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-3">
+    <div class="row mb-3">
+        <div class="col-lg-3 col-md-4">
+            <h2>Your Recommendations</h2>
+        </div>
+        <div class="col-lg-3 col-md-4">
+            <label for="scienceSelect" class="form-label">Select Science Case:</label>
+            <select id="scienceSelect" class="form-select">
+                <option value="all">All/Default</option>
+                <option value="long-lived" {% if science_case == 'long-lived' %}selected{% endif %}>Long-Lived</option>
+                <option value="anomalous" {% if science_case == 'anomalous' %}selected{% endif %}>Anomalous</option>
+                <option value="snia-like" {% if science_case == 'snia-like' %}selected{% endif %}>SN Ia-like</option>
+                <option value="ccsn-like" {% if science_case == 'ccsn-like' %}selected{% endif %}>CCSN-like</option>
+                <option value="precursor" {% if science_case == 'precursor' %}selected{% endif %}>Precursor</option>
+            </select>
+        </div>
+        <div class="col-lg-3 col-md-4">
+            <label for="startZtfidInput" class="form-label">Start ZTFID (optional):</label>
+            <input type="text" id="startZtfidInput" class="form-control" placeholder="e.g., ZTF21aaublej" value="{{ start_ztfid or '' }}">
+        </div>
+        <div class="col-lg-3 col-md-12">
+            <button id="startDemoButton" class="btn btn-success w-100 mt-4" style="display: none;">
+                <i class="bi bi-play-circle"></i> Start Interactive Demo
+            </button>
+        </div>
+    </div>
+
+    <!-- Observing Constraints Section -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header collapsible-header" data-target="observingConstraints">
+                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="fas fa-telescope"></i> Constraints
+                        </span>
+                        <i class="fas fa-chevron-down collapse-icon"></i>
+                    </h5>
+                </div>
+                <div class="card-body collapse show" id="observingConstraints">
+                    <!-- Archival vs Real-time Toggle -->
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <div class="d-flex align-items-center justify-content-between p-3 bg-light rounded">
+                                <div>
+                                    <label class="form-label mb-1 fw-bold">
+                                        <i class="fas fa-database"></i> Recommendation Mode
+                                    </label>
+                                    <div class="form-text small">
+                                        <span id="realtimeModeDescription">Search entire archival catalog</span>
+                                    </div>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="realtimeToggle" onchange="toggleRealtimeMode()">
+                                    <label class="form-check-label fw-bold" for="realtimeToggle" id="realtimeToggleLabel">
+                                        Archival
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Real-time Detection Filter (hidden by default) -->
+                    <div class="row mb-3" id="realtimeFilterRow" style="display: none;">
+                        <div class="col-md-6">
+                            <label for="recentDaysSelect" class="form-label">
+                                <i class="fas fa-clock text-warning"></i> Recent Detections
+                            </label>
+                            <select class="form-select" id="recentDaysSelect" onchange="updateRecommendations()">
+                                <option value="1">Last 1 day</option>
+                                <option value="2">Last 2 days</option>
+                                <option value="3">Last 3 days</option>
+                                <option value="7" selected>Last 7 days</option>
+                                <option value="14">Last 14 days</option>
+                                <option value="30">Last 30 days</option>
+                            </select>
+                            <div class="form-text">Only objects with detections in this timeframe</div>
+                        </div>
+                    </div>
+
+                    <div class="row align-items-end">
+                        <div class="col-lg-3 col-md-6">
+                            <label for="obsConstraintTelescope" class="form-label">
+                                <i class="fas fa-satellite-dish"></i> Telescope:
+                            </label>
+                            <select id="obsConstraintTelescope" class="form-select">
+                                <option value="">Any</option>
+                                <option value="palomar">Palomar (P48, P60, etc.)</option>
+                                <option value="keck">Keck</option>
+                                <option value="lick">Lick</option>
+                                <option value="apo">APO</option>
+                                <option value="gemini-n">Gemini North</option>
+                                <option value="gemini-s">Gemini South</option>
+                                <option value="magellan">Magellan</option>
+                                <option value="mmt">MMT</option>
+                                <option value="ctio">CTIO</option>
+                                <option value="rubin">Rubin LSST</option>
+                            </select>
+                        </div>
+                        <div class="col-lg-2 col-md-3">
+                            <label for="obsConstraintDays" class="form-label">
+                                <i class="fas fa-calendar-day"></i> Days Until Observing:
+                            </label>
+                            <input type="number" id="obsConstraintDays" class="form-control" placeholder="e.g., 3">
+                        </div>
+                        <div class="col-lg-2 col-md-3">
+                            <label for="obsConstraintMagLimit" class="form-label">
+                                <i class="fas fa-eye"></i> Mag Limit:
+                            </label>
+                            <input type="number" step="0.1" id="obsConstraintMagLimit" class="form-control" placeholder="e.g., 20.5">
+                        </div>
+                        <div class="col-lg-2 col-md-6">
+                            <label class="form-label">
+                                <i class="fas fa-check-circle"></i> Apply:
+                            </label>
+                            <button id="applyObsConstraints" class="btn btn-outline-primary w-100 d-block">
+                                <i class="fas fa-filter"></i> Apply Filters
+                            </button>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <label class="form-label">
+                                <i class="fas fa-eraser"></i> Reset:
+                            </label>
+                            <button id="clearConstraints" class="btn btn-outline-secondary w-100 d-block">
+                                <i class="fas fa-times"></i> Clear Constraints
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Extraction Status -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header collapsible-header" data-target="featureExtraction">
+                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="fas fa-cogs"></i> Feature Extraction
+                        </span>
+                        <i class="fas fa-chevron-down collapse-icon"></i>
+                    </h5>
+                </div>
+                <div class="card-body collapse show" id="featureExtraction">
+                    <div id="extractionStatus">
+                        <p class="text-muted">Loading extraction status...</p>
+                    </div>
+                    
+                    <!-- Extraction Configuration -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="lookbackDays" class="form-label">
+                                <i class="fas fa-calendar-alt"></i> Lookback Days:
+                            </label>
+                            <input type="number" 
+                                   id="lookbackDays" 
+                                   class="form-control" 
+                                   value="7" 
+                                   min="0.1" 
+                                   max="365" 
+                                   step="0.1"
+                                   title="Number of days to look back for new detections">
+                            <small class="form-text text-muted">
+                                Days to look back for new detections (0.1 - 365)
+                            </small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">
+                                <i class="fas fa-redo-alt"></i> Processing Options:
+                            </label>
+                            <div class="form-check">
+                                <input class="form-check-input" 
+                                       type="checkbox" 
+                                       id="forceReprocess" 
+                                       title="Force reprocessing of existing objects">
+                                <label class="form-check-label" for="forceReprocess">
+                                    Force reprocess existing objects
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">
+                                Reprocess objects even if recently updated
+                            </small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">
+                                <i class="fas fa-play"></i> Extract Features:
+                            </label>
+                            <button id="extract-features-button" 
+                                    class="btn btn-warning d-block w-100">
+                                <i class="fas fa-cogs"></i> Start Extraction
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Presets -->
+                    <div class="row">
+                        <div class="col-12">
+                            <label class="form-label">
+                                <i class="fas fa-magic"></i> Quick Presets:
+                            </label>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-outline-info btn-sm preset-btn" data-days="1">
+                                    <i class="fas fa-clock"></i> Last Day
+                                </button>
+                                <button class="btn btn-outline-info btn-sm preset-btn" data-days="7">
+                                    <i class="fas fa-calendar-week"></i> Last Week
+                                </button>
+                                <button class="btn btn-outline-info btn-sm preset-btn" data-days="30">
+                                    <i class="fas fa-calendar-alt"></i> Last Month
+                                </button>
+                                <button class="btn btn-outline-info btn-sm preset-btn" data-days="90">
+                                    <i class="fas fa-calendar"></i> Last 3 Months
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Row -->
+    <div class="row">
+        <!-- Main Object Display Column -->
+        <div class="col-xl-8 col-lg-7">
+            <div id="current-object-container" class="card mb-3" style="display: none;"> 
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 id="currentObjectId"></h5>
+                    <small id="currentObjectDetails" class="text-muted"></small>
+                </div>
+                <div class="card-body">
+                    <div id="mainViewer" class="mb-3" style="height: 70vh; width: 100%;">
+                        <!-- ALeRCE Explorer will be embedded here -->
+                    </div>
+                    <div class="actions mb-3">
+                        <button id="likeBtn" class="btn btn-outline-success me-2"><i class="fas fa-thumbs-up"></i> Like (0)</button>
+                        <button id="dislikeBtn" class="btn btn-outline-danger me-2"><i class="fas fa-thumbs-down"></i> Dislike (0)</button>
+                        <button id="targetBtn" class="btn btn-outline-warning me-2"><i class="fas fa-crosshairs"></i> Target (0)</button>
+                        <button id="skipBtn" class="btn btn-outline-secondary me-2"><i class="fas fa-forward"></i> Next (0)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar Column -->
+        <div class="col-xl-4 col-lg-5">
+            <!-- Slack Voting Data Section -->
+            <div id="slackVotingSection" class="card mb-3" style="display: none;">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-slack"></i> YSE ZAPSTER Votes</h6>
+                </div>
+                <div class="card-body">
+                    <div id="slackVotingData">
+                        <p class="text-muted">Loading voting data...</p>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <!-- Comments Section -->
+            <div id="notesSection" class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0">Comments</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Comment input area -->
+                    <div class="comment-input-section mb-3">
+                        <textarea id="newCommentText" class="form-control" rows="2" placeholder="Add a comment..."></textarea>
+                        <button id="addCommentButton" class="btn btn-outline-success btn-sm mt-2">Add Comment</button>
+                    </div>
+                    
+                    <!-- Comments display area -->
+                    <div id="commentsContainer" class="comments-container">
+                        <!-- Comments will appear here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Audio Recording Section -->
+            <div id="audioSection" class="card mb-3" style="display: none;">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-mic-fill"></i> Audio Notes</h5>
+                </div>
+                <div class="card-body">
+                    <button id="recordAudioButton" class="btn btn-info mb-3"><i class="bi bi-mic-fill"></i> Record Audio</button>
+                    <div id="audioRecordings" class="audio-recordings-container">
+                        <!-- Audio recordings will appear here -->
+                    </div>
+                    <div id="noAudioMessage" class="text-muted text-center py-3" style="display: none;">
+                        <i class="bi bi-mic-mute"></i> No audio recordings yet
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tags Section -->
+            <div id="tagsSection" class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0">Tags</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Science Tags -->
+                    <div class="tag-category mb-3">
+                        <h6 class="tag-category-title">Science Tags:</h6>
+                        <div class="tag-buttons mb-2">
+                            <button class="btn btn-sm btn-outline-primary tag-btn" data-tag="Ia-like" data-category="science">Ia-like</button>
+                            <button class="btn btn-sm btn-outline-primary tag-btn" data-tag="CCSN-like" data-category="science">CCSN-like</button>
+                            <button class="btn btn-sm btn-outline-primary tag-btn" data-tag="anomalous" data-category="science">anomalous</button>
+                            <button class="btn btn-sm btn-outline-primary tag-btn" data-tag="precursor" data-category="science">precursor</button>
+                            <button class="btn btn-sm btn-outline-primary tag-btn" data-tag="long-lived" data-category="science">long-lived</button>
+                        </div>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control custom-tag-input" placeholder="Other science tag..." data-category="science">
+                            <button class="btn btn-outline-primary add-custom-tag-btn" data-category="science">Add</button>
+                        </div>
+                    </div>
+
+
+
+                    <!-- Photometry Tags -->
+                    <div class="tag-category mb-3">
+                        <h6 class="tag-category-title">Photometry Tags:</h6>
+                        <div class="tag-buttons mb-2">
+                            <button class="btn btn-sm btn-outline-warning tag-btn" data-tag="fast rise" data-category="photometry">fast rise</button>
+                            <button class="btn btn-sm btn-outline-warning tag-btn" data-tag="slow rise" data-category="photometry">slow rise</button>
+                            <button class="btn btn-sm btn-outline-warning tag-btn" data-tag="unusual color evolution" data-category="photometry">unusual color evolution</button>
+                            <button class="btn btn-sm btn-outline-warning tag-btn" data-tag="re-brightening" data-category="photometry">re-brightening</button>
+                            <button class="btn btn-sm btn-outline-warning tag-btn" data-tag="plateau" data-category="photometry">plateau</button>
+                        </div>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control custom-tag-input" placeholder="Other photometry tag..." data-category="photometry">
+                            <button class="btn btn-outline-warning add-custom-tag-btn" data-category="photometry">Add</button>
+                        </div>
+                    </div>
+
+                    <!-- Host Tags -->
+                    <div class="tag-category mb-3">
+                        <h6 class="tag-category-title">Host Tags:</h6>
+                        <div class="tag-buttons mb-2">
+                            <button class="btn btn-sm btn-outline-info tag-btn" data-tag="interacting system" data-category="host">interacting system</button>
+                            <button class="btn btn-sm btn-outline-info tag-btn" data-tag="elliptical" data-category="host">elliptical</button>
+                            <button class="btn btn-sm btn-outline-info tag-btn" data-tag="spiral" data-category="host">spiral</button>
+                            <button class="btn btn-sm btn-outline-info tag-btn" data-tag="low surface brightness" data-category="host">low surface brightness</button>
+                            <button class="btn btn-sm btn-outline-info tag-btn" data-tag="large offset" data-category="host">large offset</button>
+                            <button class="btn btn-sm btn-outline-info tag-btn" data-tag="nuclear" data-category="host">nuclear</button>
+                        </div>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control custom-tag-input" placeholder="Other host tag..." data-category="host">
+                            <button class="btn btn-outline-info add-custom-tag-btn" data-category="host">Add</button>
+                        </div>
+                    </div>
+
+                    <div id="currentTags" class="mt-3">
+                        <!-- Current tags will be shown here organized by category -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading-recommendations" class="text-center" style="display: none;">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading recommendations...</span>
+        </div>
+        <p>Loading recommendations...</p>
+    </div>
+    <div id="no-more-recommendations" class="alert alert-info" role="alert" style="display: none;">
+        No more unvoted objects available for this science case. Try selecting another or check back later!
+    </div>
+    
+    <!-- Mobile swipe hint -->
+    <div class="mobile-swipe-hint">
+        📱 Swipe: ← Dislike | → Like | ↑ Target | ↓ Next
+    </div>
+</div>
+
+
+
+<!-- Target Modal -->
+<div class="target-modal" id="target-modal">
+    <div class="target-modal-content">
+        <div class="target-modal-header">
+            <h3>
+                <i class="bi bi-crosshair"></i>
+                My Targets
+                <span id="target-modal-count" class="target-count-badge">0</span>
+            </h3>
+            <button class="target-modal-close" id="target-modal-close">&times;</button>
+        </div>
+        
+        <div class="target-modal-body">
+            <div id="target-list-grid" class="target-list-grid">
+                <p class="text-muted text-center">No targets yet</p>
+            </div>
+        </div>
+        
+        <div class="target-modal-footer">
+            <button class="btn btn-outline-primary" id="download-catalog-btn" onclick="saveTargetList()">
+                <i class="bi bi-download"></i> Download Catalog
+            </button>
+            <button class="btn btn-primary" id="generate-finders-btn" onclick="generateFinderCharts()">
+                <i class="bi bi-camera"></i> Generate Finder Charts
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .recommendation-card {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        background-color: #f9f9f9;
+    }
+    
+    .comments-container {
+        max-height: 400px;
+        overflow-y: auto;
+        border: 1px solid #e0e0e0;
+        border-radius: 5px;
+        padding: 10px;
+        background-color: #fafafa;
+    }
+    
+    .comment-item {
+        background-color: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 10px;
+        position: relative;
+    }
+    
+    .comment-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        font-size: 0.9em;
+        color: #666;
+    }
+    
+    .comment-username {
+        font-weight: bold;
+        color: #007bff;
+    }
+    
+    .comment-timestamp {
+        font-size: 0.8em;
+        color: #999;
+    }
+    
+    .comment-text {
+        margin-bottom: 8px;
+        line-height: 1.4;
+    }
+    
+    .comment-actions {
+        display: flex;
+        gap: 8px;
+    }
+    
+    .comment-actions button {
+        font-size: 0.8em;
+        padding: 2px 8px;
+    }
+    
+    .comment-edit-form {
+        display: none;
+    }
+    
+    .comment-edit-form textarea {
+        margin-bottom: 8px;
+    }
+    
+    .comment-input-section textarea {
+        resize: vertical;
+        min-height: 60px;
+    }
+    
+    .no-comments {
+        text-align: center;
+        color: #999;
+        font-style: italic;
+        padding: 20px;
+    }
+    
+    .audio-recordings-container {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    .audio-item {
+        background-color: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .audio-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+    }
+    
+    .audio-player {
+        flex: 1;
+        max-width: 300px;
+    }
+    
+    .audio-actions {
+        display: flex;
+        gap: 5px;
+    }
+    
+    .audio-actions button {
+        font-size: 0.8em;
+        padding: 4px 8px;
+    }
+    
+    .audio-timestamp {
+        font-size: 0.8em;
+        color: #666;
+        white-space: nowrap;
+    }
+
+    .tag-category {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        background-color: #fafafa;
+    }
+
+    .tag-category-title {
+        margin-bottom: 10px;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .tag-btn {
+        margin: 2px;
+        transition: all 0.2s ease;
+    }
+
+    .tag-btn.active {
+        background-color: var(--bs-primary);
+        color: white;
+        border-color: var(--bs-primary);
+    }
+
+    .tag-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .current-tags-category {
+        margin-bottom: 10px;
+        padding: 8px;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        border-left: 3px solid #007bff;
+    }
+
+    .current-tags-category h6 {
+        margin-bottom: 5px;
+        color: #495057;
+        font-size: 0.9em;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .current-tag-item {
+        display: inline-block;
+        background-color: #e9ecef;
+        color: #495057;
+        padding: 3px 8px;
+        margin: 2px;
+        border-radius: 12px;
+        font-size: 0.85em;
+        border: 1px solid #dee2e6;
+    }
+
+    .spectrum-item {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 10px;
+        background-color: white;
+        transition: box-shadow 0.2s ease;
+    }
+
+    .spectrum-item:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .spectrum-header {
+        display: flex;
+        justify-content: between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .spectrum-title {
+        font-weight: 600;
+        color: #333;
+        margin: 0;
+    }
+
+    .spectrum-source {
+        background-color: #007bff;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.75em;
+        text-transform: uppercase;
+    }
+
+    .spectrum-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .spectrum-detail {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .spectrum-detail-label {
+        font-size: 0.8em;
+        color: #666;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .spectrum-detail-value {
+        font-size: 0.9em;
+        color: #333;
+        margin-top: 2px;
+    }
+
+    /* Demo-specific styling */
+    .demo-object-panel {
+        display: none;
+    }
+
+    .demo-object-panel.active {
+        display: block;
+    }
+
+    .demo-nav-btn {
+        font-size: 0.875rem;
+        padding: 0.5rem 1rem;
+    }
+
+    .demo-nav-btn.active {
+        background-color: var(--bs-primary);
+        color: white;
+        border-color: var(--bs-primary);
+    }
+
+    .demo-object-viewer {
+        border: 2px solid var(--bs-border-color);
+        border-radius: 0.5rem;
+        overflow: hidden;
+    }
+
+    .demo-tags .demo-tag-btn {
+        margin-bottom: 0.25rem;
+    }
+
+    .demo-tags .demo-tag-btn.btn-primary {
+        animation: pulse 0.6s ease-in-out;
+    }
+
+    .demo-comment .demo-comment-text {
+        font-size: 0.875rem;
+    }
+
+    .demo-progress .progress {
+        height: 1.25rem;
+    }
+
+    .demo-activity-log {
+        max-height: 120px;
+        overflow-y: auto;
+        background-color: var(--bs-gray-100);
+        border-radius: 0.25rem;
+        padding: 0.5rem;
+        border: 1px solid var(--bs-border-color);
+    }
+
+    .demo-activity-log:empty::before {
+        content: "Activity log will appear here...";
+        color: var(--bs-gray-500);
+        font-style: italic;
+    }
+
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+
+    .demo-vote-btn.btn-success {
+        animation: success-flash 0.8s ease-in-out;
+    }
+
+    @keyframes success-flash {
+        0% { background-color: var(--bs-success); }
+        50% { background-color: var(--bs-success); transform: scale(1.05); }
+        100% { background-color: var(--bs-success); }
+    }
+
+    .demo-learning-points {
+        font-size: 0.875rem;
+    }
+
+    .demo-learning-points li {
+        margin-bottom: 0.25rem;
+    }
+
+    /* Dark theme support for demo */
+    [data-theme="dark"] .demo-activity-log {
+        background-color: var(--bs-gray-800);
+        color: var(--bs-gray-200);
+    }
+
+    [data-theme="dark"] .demo-object-viewer {
+        border-color: var(--bs-gray-600);
+    }
+
+    /* Collapsible card headers */
+    .collapsible-header {
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+        user-select: none;
+    }
+
+    .collapsible-header:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    .collapse-icon {
+        transition: transform 0.2s ease;
+        font-size: 0.9em;
+    }
+
+    .collapsible-header[aria-expanded="false"] .collapse-icon {
+        transform: rotate(-90deg);
+    }
+
+    .card-body.collapse {
+        border-top: none;
+    }
+
+    .card-body.collapse.show {
+        border-top: 1px solid rgba(0, 0, 0, 0.125);
+    }
+
+    /* Target Modal Styles */
+    .target-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1050;
+        backdrop-filter: blur(3px);
+    }
+
+    .target-modal.show {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .target-modal-content {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        overflow: hidden;
+        animation: modalSlideIn 0.3s ease-out;
+    }
+
+    @keyframes modalSlideIn {
+        from {
+            opacity: 0;
+            transform: scale(0.8) translateY(-50px);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+    }
+
+    .target-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px;
+        border-bottom: 1px solid #eee;
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        color: white;
+    }
+
+    .target-modal-header h3 {
+        margin: 0;
+        font-weight: 600;
+        color: white;
+    }
+
+    .target-count-badge {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 20px;
+        font-size: 0.8em;
+        font-weight: bold;
+        margin-left: 8px;
+    }
+
+    .target-modal-close {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 50%;
+        transition: background-color 0.2s;
+    }
+
+    .target-modal-close:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .target-modal-body {
+        padding: 20px;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .target-list-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .target-card {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 15px;
+        transition: all 0.2s ease;
+    }
+
+    .target-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        border-color: #007bff;
+    }
+
+    .target-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .target-card-title {
+        font-weight: 600;
+        color: #007bff;
+        text-decoration: none;
+        font-size: 1.1em;
+    }
+
+    .target-card-title:hover {
+        color: #0056b3;
+        text-decoration: underline;
+    }
+
+    .target-card-remove {
+        background: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .target-card-remove:hover {
+        background: #c82333;
+    }
+
+    .target-card-info {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .target-card-info-item {
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .target-card-info-label {
+        font-weight: 500;
+        color: #6c757d;
+        font-size: 0.9em;
+    }
+
+    .target-card-info-value {
+        font-weight: 600;
+        color: #495057;
+        font-size: 0.9em;
+    }
+
+    .target-modal-footer {
+        padding: 15px 20px;
+        border-top: 1px solid #eee;
+        background: #f8f9fa;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .target-modal-footer .btn {
+        flex: 1;
+        font-weight: 500;
+    }
+
+    /* Dark theme for target modal */
+    [data-theme="dark"] .target-modal-content {
+        background: #2d3748;
+        color: #e2e8f0;
+    }
+
+    [data-theme="dark"] .target-modal-header {
+        border-bottom-color: #4a5568;
+    }
+
+    [data-theme="dark"] .target-modal-footer {
+        background: #1a202c;
+        border-top-color: #4a5568;
+    }
+
+    [data-theme="dark"] .target-card {
+        background: #4a5568;
+        border-color: #718096;
+        color: #e2e8f0;
+    }
+
+    [data-theme="dark"] .target-card:hover {
+        border-color: #63b3ed;
+    }
+
+    [data-theme="dark"] .target-card-title {
+        color: #63b3ed;
+    }
+
+    [data-theme="dark"] .target-card-title:hover {
+        color: #90cdf4;
+    }
+
+    [data-theme="dark"] .target-card-info-label {
+        color: #a0aec0;
+    }
+
+    [data-theme="dark"] .target-card-info-value {
+        color: #e2e8f0;
+    }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Make current user information available to app.js
+    window.currentUser = {
+        id: {% if current_user %}{{ current_user.id }}{% else %}null{% endif %},
+        username: {% if current_user %}"{{ current_user.username }}"{% else %}""{% endif %},
+        is_admin: {% if current_user and current_user.is_admin %}true{% else %}false{% endif %}
+    };
+
+    // Ensure this runs after app.js loads
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Current user set for feature extraction:', window.currentUser);
+        
+        // Check if extraction button should be visible for admin users
+        if (window.currentUser && window.currentUser.is_admin) {
+            console.log('User is admin, extraction button should be visible');
+            const extractButton = document.getElementById('extract-features-button');
+            if (extractButton) {
+                extractButton.style.display = 'block';
+                console.log('Extract features button shown for admin user');
+            }
+        }
+    });
+</script>
+{% endblock %} 

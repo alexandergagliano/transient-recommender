@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Development files
+.git/
+.gitignore
+README.md
+*.md
+.pytest_cache/
+tests/
+test_*.py
+*_test.py
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Large data files (keep only essential)
+*.zip
+*.tar.gz
+
+# Obsolete and backup files
+obsolete/
+backup/
+*.bak
+*.backup
+
+# Development databases (use production DB)
+test.db 

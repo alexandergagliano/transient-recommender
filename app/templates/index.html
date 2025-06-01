@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transient Recommender</title>
+    
+    <!-- Bootstrap CSS and Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+    
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            color: #495057;
+        }
+        
+        .hero-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding: 2rem;
+        }
+        
+        .hero-content {
+            text-align: center;
+            max-width: 800px;
+            z-index: 2;
+            position: relative;
+        }
+        
+        .logo-section {
+            margin-bottom: 3rem;
+            opacity: 0;
+            animation: fadeInUp 1s ease-out 0.2s forwards;
+        }
+        
+        .logo-icon {
+            font-size: 4rem;
+            color: #3498db;
+            margin-bottom: 1rem;
+            display: inline-block;
+        }
+        
+        .hero-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 4rem;
+            font-weight: 700;
+            margin: 0;
+            color: #2c3e50;
+            line-height: 1.1;
+            opacity: 0;
+            animation: fadeInUp 1s ease-out 0.4s forwards;
+        }
+        
+        .hero-subtitle {
+            font-size: 1.5rem;
+            font-weight: 300;
+            margin: 2rem 0 3rem 0;
+            color: #6c757d;
+            line-height: 1.4;
+            opacity: 0;
+            animation: fadeInUp 1s ease-out 0.6s forwards;
+        }
+        
+        .auth-buttons {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            opacity: 0;
+            animation: fadeInUp 1s ease-out 0.8s forwards;
+        }
+        
+        .hero-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem 2rem;
+            font-size: 1.1rem;
+            font-weight: 500;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            min-width: 150px;
+            justify-content: center;
+            border: 2px solid transparent;
+        }
+        
+        .hero-button.primary {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+        
+        .hero-button.secondary {
+            background: transparent;
+            color: #3498db;
+            border-color: #3498db;
+        }
+        
+        .hero-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(52, 152, 219, 0.3);
+            color: white;
+            text-decoration: none;
+        }
+        
+        .hero-button.primary:hover {
+            background: #2980b9;
+            border-color: #2980b9;
+        }
+        
+        .hero-button.secondary:hover {
+            background: #3498db;
+            border-color: #3498db;
+        }
+        
+        .features-hint {
+            margin-top: 4rem;
+            opacity: 0.8;
+            font-size: 0.95rem;
+            opacity: 0;
+            animation: fadeInUp 1s ease-out 1s forwards;
+        }
+        
+        .features-list {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        
+        .feature-item i {
+            color: #3498db;
+        }
+        
+        .floating-elements {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        .floating-star {
+            position: absolute;
+            color: rgba(52, 152, 219, 0.1);
+            animation: float 8s ease-in-out infinite;
+        }
+        
+        .floating-star:nth-child(odd) {
+            animation-delay: -2s;
+        }
+        
+        .floating-star:nth-child(even) {
+            animation-delay: -4s;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 2.5rem;
+            }
+            
+            .hero-subtitle {
+                font-size: 1.2rem;
+            }
+            
+            .auth-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .hero-button {
+                width: 100%;
+                max-width: 250px;
+            }
+            
+            .features-list {
+                flex-direction: column;
+                align-items: center;
+                gap: 1rem;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .hero-title {
+                font-size: 2rem;
+            }
+            
+            .logo-icon {
+                font-size: 3rem;
+            }
+            
+            .hero-container {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="hero-container">
+        <!-- Floating Background Elements -->
+        <div class="floating-elements">
+            <i class="bi bi-star-fill floating-star" style="top: 10%; left: 10%; font-size: 1rem;"></i>
+            <i class="bi bi-star-fill floating-star" style="top: 20%; right: 15%; font-size: 0.8rem;"></i>
+            <i class="bi bi-star-fill floating-star" style="top: 30%; left: 20%; font-size: 1.2rem;"></i>
+            <i class="bi bi-star-fill floating-star" style="bottom: 25%; right: 10%; font-size: 1rem;"></i>
+            <i class="bi bi-star-fill floating-star" style="bottom: 15%; left: 15%; font-size: 0.9rem;"></i>
+            <i class="bi bi-star-fill floating-star" style="top: 50%; right: 25%; font-size: 0.7rem;"></i>
+        </div>
+        
+        <div class="hero-content">
+            <div class="logo-section">
+                <div class="logo-icon">
+                    <i class="bi bi-stars"></i>
+                </div>
+            </div>
+            
+            <h1 class="hero-title">
+                The Transient Recommender
+            </h1>
+            
+            <p class="hero-subtitle">
+                Discover and classify the most interesting transients in the universe.<br>
+                Powered by machine learning and domain expertise.
+            </p>
+            
+            <div class="auth-buttons">
+                <a href="/login" class="hero-button primary">
+                    <i class="bi bi-box-arrow-in-right"></i>
+                    Login
+                </a>
+                <a href="/register" class="hero-button secondary">
+                    <i class="bi bi-person-plus"></i>
+                    Get Started
+                </a>
+            </div>
+            
+            <div class="features-hint">
+                <div class="features-list">
+                    <div class="feature-item">
+                        <i class="bi bi-lightning-charge-fill"></i>
+                        Provides ML-Powered Recommendations
+                    </div>
+                    <div class="feature-item">
+                        <i class="bi bi-graph-up"></i>
+                        Builds Datasets for Future ML Algorithms
+                    </div>
+                    <div class="feature-item">
+                        <i class="bi bi-people-fill"></i>
+                        Enables Collaborative Science
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
