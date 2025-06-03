@@ -134,6 +134,24 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Science Settings -->
+            <div id="scienceSettings" class="card mt-4" style="display: none;">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-flask"></i> Science Settings</h5>
+                    <button id="addScienceCategory" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus"></i> Add Science Category
+                    </button>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Manage science categories that appear in registration checkboxes, user profiles, and recommendation dropdowns.
+                    </p>
+                    <div id="scienceCategoriesList">
+                        <!-- Science categories will be populated here -->
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -184,10 +202,10 @@
                             <label for="newAlgCode" class="form-label">Python Code *</label>
                             <textarea class="form-control" id="newAlgCode" rows="15" required placeholder="def my_filter(ztfid, confidence_threshold):
     # Your filter code here
-    # Return a dict with 'label' and 'score' (0-100)
-    return {'label': 'snia-like', 'score': 75.0}"></textarea>
+    # Return a dict with custom 'label' and 'score' (0-100)
+    return {'label': 'Type Ia Normal', 'score': 85.0}"></textarea>
                             <small class="form-text text-muted">
-                                Function should accept 'ztfid' (string) and 'confidence_threshold' (float) parameters and return a dict with 'label' and 'score' (0-100).
+                                Function should accept 'ztfid' (string) and 'confidence_threshold' (float) parameters and return a dict with custom 'label' (specific to this filter) and 'score' (0-100).
                             </small>
                         </div>
                     </div>
@@ -266,7 +284,7 @@
                             <label for="editAlgCode" class="form-label">Python Code *</label>
                             <textarea class="form-control" id="editAlgCode" rows="15" required></textarea>
                             <small class="form-text text-muted">
-                                Function should accept 'ztfid' (string) and 'confidence_threshold' (float) parameters and return a dict with 'label' and 'score' (0-100).
+                                Function should accept 'ztfid' (string) and 'confidence_threshold' (float) parameters and return a dict with custom 'label' (specific to this filter) and 'score' (0-100).
                             </small>
                         </div>
                     </div>
@@ -294,6 +312,56 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-danger me-auto" id="deleteAlgorithmBtn">Delete Algorithm</button>
                 <button type="button" class="btn btn-primary" id="updateAlgorithmBtn">Update Algorithm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Science Category Modal -->
+<div class="modal fade" id="scienceCategoryModal" tabindex="-1" aria-labelledby="scienceCategoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="scienceCategoryModalLabel">Add Science Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="scienceCategoryForm">
+                    <input type="hidden" id="editCategoryId" />
+                    <div class="mb-3">
+                        <label for="categoryKey" class="form-label">Category Key *</label>
+                        <input type="text" class="form-control" id="categoryKey" required 
+                               placeholder="e.g., snia-like" pattern="[a-z0-9-]+" 
+                               title="Use lowercase letters, numbers, and hyphens only">
+                        <small class="form-text text-muted">
+                            Internal identifier (lowercase, hyphens allowed). Used in URLs and backend.
+                        </small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="categoryDisplayName" class="form-label">Display Name *</label>
+                        <input type="text" class="form-control" id="categoryDisplayName" required 
+                               placeholder="e.g., SN Ia-like">
+                        <small class="form-text text-muted">
+                            Human-readable name shown in UI.
+                        </small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="categoryDescription" class="form-label">Description</label>
+                        <textarea class="form-control" id="categoryDescription" rows="3" 
+                                  placeholder="Brief description of this science category..."></textarea>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="categoryEnabled" checked>
+                        <label class="form-check-label" for="categoryEnabled">
+                            Enable category
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger me-auto" id="deleteCategoryBtn" style="display: none;">Delete Category</button>
+                <button type="button" class="btn btn-primary" id="saveCategoryBtn">Add Category</button>
             </div>
         </div>
     </div>
@@ -330,6 +398,11 @@ function setupEventListeners() {
     // Delete algorithm
     document.getElementById('deleteAlgorithmBtn').addEventListener('click', deleteAlgorithm);
     
+    // Science category management
+    document.getElementById('addScienceCategory').addEventListener('click', showAddCategoryModal);
+    document.getElementById('saveCategoryBtn').addEventListener('click', saveCategory);
+    document.getElementById('deleteCategoryBtn').addEventListener('click', deleteCategory);
+    
     // Global settings change tracking
     ['runAfterExtraction', 'maxConcurrent', 'logLevel', 'cacheResults', 'cacheDuration'].forEach(id => {
         const element = document.getElementById(id);
@@ -364,6 +437,7 @@ async function loadAlgorithmConfiguration() {
 function renderConfiguration() {
     renderTabs();
     renderGlobalSettings();
+    renderScienceSettings();
 }
 
 function renderTabs() {
@@ -621,6 +695,150 @@ function hideLoading() {
     document.getElementById('loadingIndicator').style.display = 'none';
     document.getElementById('algorithmTabs').style.display = 'block';
     document.getElementById('globalSettings').style.display = 'block';
+    document.getElementById('scienceSettings').style.display = 'block';
+}
+
+// Science Category Management Functions
+function renderScienceSettings() {
+    const container = document.getElementById('scienceCategoriesList');
+    const scienceCategories = algorithmConfig.science_categories || getDefaultScienceCategories();
+    
+    let content = '';
+    
+    scienceCategories.forEach(category => {
+        content += `
+            <div class="card mb-3 science-category-card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="mb-1">${category.display_name}</h6>
+                            <small class="text-muted mb-2 d-block">Key: <code>${category.key}</code></small>
+                            <p class="text-muted mb-0 small">${category.description || 'No description provided'}</p>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-${category.enabled ? 'success' : 'secondary'}">
+                                ${category.enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editCategory('${category.key}')">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = content;
+}
+
+function getDefaultScienceCategories() {
+    return [
+        { key: 'snia-like', display_name: 'SN Ia-like', description: 'Type Ia supernova candidates', enabled: true },
+        { key: 'ccsn-like', display_name: 'CCSN-like', description: 'Core-collapse supernova candidates', enabled: true },
+        { key: 'anomalous', display_name: 'Anomalous', description: 'Unusual or anomalous transients', enabled: true },
+        { key: 'long-lived', display_name: 'Long-Lived', description: 'Long-duration transients', enabled: true },
+        { key: 'precursor', display_name: 'Precursor', description: 'Pre-supernova activity', enabled: true }
+    ];
+}
+
+function showAddCategoryModal() {
+    document.getElementById('scienceCategoryModalLabel').textContent = 'Add Science Category';
+    document.getElementById('editCategoryId').value = '';
+    document.getElementById('scienceCategoryForm').reset();
+    document.getElementById('categoryEnabled').checked = true;
+    document.getElementById('deleteCategoryBtn').style.display = 'none';
+    document.getElementById('saveCategoryBtn').textContent = 'Add Category';
+    document.getElementById('categoryKey').disabled = false;
+    
+    new bootstrap.Modal(document.getElementById('scienceCategoryModal')).show();
+}
+
+function editCategory(categoryKey) {
+    const scienceCategories = algorithmConfig.science_categories || getDefaultScienceCategories();
+    const category = scienceCategories.find(cat => cat.key === categoryKey);
+    if (!category) return;
+    
+    document.getElementById('scienceCategoryModalLabel').textContent = 'Edit Science Category';
+    document.getElementById('editCategoryId').value = categoryKey;
+    document.getElementById('categoryKey').value = category.key;
+    document.getElementById('categoryDisplayName').value = category.display_name;
+    document.getElementById('categoryDescription').value = category.description || '';
+    document.getElementById('categoryEnabled').checked = category.enabled;
+    document.getElementById('deleteCategoryBtn').style.display = 'block';
+    document.getElementById('saveCategoryBtn').textContent = 'Update Category';
+    document.getElementById('categoryKey').disabled = true; // Don't allow changing key of existing category
+    
+    new bootstrap.Modal(document.getElementById('scienceCategoryModal')).show();
+}
+
+async function saveCategory() {
+    const form = document.getElementById('scienceCategoryForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const editingKey = document.getElementById('editCategoryId').value;
+    const categoryData = {
+        key: document.getElementById('categoryKey').value,
+        display_name: document.getElementById('categoryDisplayName').value,
+        description: document.getElementById('categoryDescription').value,
+        enabled: document.getElementById('categoryEnabled').checked
+    };
+    
+    if (!algorithmConfig.science_categories) {
+        algorithmConfig.science_categories = getDefaultScienceCategories();
+    }
+    
+    if (editingKey) {
+        // Update existing category
+        const index = algorithmConfig.science_categories.findIndex(cat => cat.key === editingKey);
+        if (index !== -1) {
+            algorithmConfig.science_categories[index] = categoryData;
+        }
+    } else {
+        // Add new category
+        // Check if key already exists
+        if (algorithmConfig.science_categories.find(cat => cat.key === categoryData.key)) {
+            showToast('Category key already exists', 'error');
+            return;
+        }
+        algorithmConfig.science_categories.push(categoryData);
+    }
+    
+    markAsChanged();
+    renderScienceSettings();
+    
+    bootstrap.Modal.getInstance(document.getElementById('scienceCategoryModal')).hide();
+    showToast(editingKey ? 'Category updated successfully' : 'Category added successfully', 'success');
+}
+
+async function deleteCategory() {
+    const categoryKey = document.getElementById('editCategoryId').value;
+    if (!confirm(`Are you sure you want to delete the "${categoryKey}" science category? This will also remove any associated algorithms.`)) {
+        return;
+    }
+    
+    if (!algorithmConfig.science_categories) {
+        algorithmConfig.science_categories = getDefaultScienceCategories();
+    }
+    
+    // Remove the category
+    algorithmConfig.science_categories = algorithmConfig.science_categories.filter(
+        cat => cat.key !== categoryKey
+    );
+    
+    // Remove any filters for this category
+    if (algorithmConfig.filters && algorithmConfig.filters[categoryKey]) {
+        delete algorithmConfig.filters[categoryKey];
+    }
+    
+    markAsChanged();
+    renderConfiguration(); // Re-render everything since we removed filters too
+    
+    bootstrap.Modal.getInstance(document.getElementById('scienceCategoryModal')).hide();
+    showToast('Category deleted successfully', 'success');
 }
 
 // Use the showToast function from app.js (automatically available in global scope)
