@@ -25,4 +25,5 @@ antares-client>=1.0.0
 scikit-learn>=1.1.0
 photutils>=1.8.0
 matplotlib>=3.5.0
-astropy>=5.0.0 
+astropy>=5.0.0
+PyYAML>=6.0.0 

@@ -1453,6 +1453,7 @@ function updateObjectDisplay() {
     displayCurrentObjectTags(ztfid);
     loadComments(ztfid);
     loadAudioRecordings(ztfid);
+    loadClassifierBadges(ztfid);
     loadSlackVotes(ztfid);     
     loadVoteCounts(ztfid);
 
@@ -3710,6 +3711,76 @@ function showStepByStepDemo(demoObjects) {
     // Remove modal when closed
     document.getElementById('demoModal').addEventListener('hidden.bs.modal', function () {
         this.remove();
+    });
+}
+
+// Add classifier badge functionality
+async function loadClassifierBadges(ztfid) {
+    try {
+        console.log(`Loading classifier badges for ${ztfid}`);
+        const response = await fetch(`/api/classifier-badges/${ztfid}`);
+        const data = await response.json();
+        
+        if (data.badges && data.badges.length > 0) {
+            displayClassifierBadges(data);
+            document.getElementById('classifierBadgesSection').style.display = 'block';
+        } else {
+            document.getElementById('classifierBadgesSection').style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error loading classifier badges:', error);
+        document.getElementById('classifierBadgesSection').style.display = 'none';
+    }
+}
+
+function displayClassifierBadges(data) {
+    const container = document.getElementById('classifierBadgesData');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (!data.badges || data.badges.length === 0) {
+        container.innerHTML = '<p class="text-muted">No classifier results available</p>';
+        return;
+    }
+    
+    data.badges.forEach(badge => {
+        const badgeElement = document.createElement('div');
+        badgeElement.className = 'classifier-badge mb-3 p-3 border rounded';
+        
+        // Determine badge color based on type
+        let badgeClass = 'border-primary';
+        let iconClass = 'fas fa-robot';
+        
+        if (badge.badge_type === 'anomaly') {
+            badgeClass = 'border-warning';
+            iconClass = 'fas fa-exclamation-triangle';
+        } else if (badge.badge_type === 'classification') {
+            badgeClass = 'border-success';
+            iconClass = 'fas fa-check-circle';
+        }
+        
+        badgeElement.className += ` ${badgeClass}`;
+        
+        badgeElement.innerHTML = `
+            <div class="d-flex align-items-start">
+                <i class="${iconClass} text-${badgeClass.replace('border-', '')} me-2 mt-1"></i>
+                <div class="flex-grow-1">
+                    <h6 class="mb-1">
+                        <a href="${badge.classifier_url}" target="_blank" class="text-decoration-none">
+                            ${badge.classifier_name}
+                        </a>
+                        ${badge.confidence ? `<span class="badge bg-${badgeClass.replace('border-', '')} ms-2">${badge.confidence.toFixed(1)}%</span>` : ''}
+                    </h6>
+                    <p class="mb-1 small text-muted">${badge.description}</p>
+                    <p class="mb-0 small">
+                        ${badge.badge_text}
+                    </p>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(badgeElement);
     });
 }
 

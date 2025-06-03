@@ -19,6 +19,7 @@ from scipy.signal import find_peaks
 import json
 
 from . import models
+from .classifier_manager import classifier_manager
 
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -677,6 +678,36 @@ def extract_features_for_recent_objects(
         db.commit()
         
         logger.info(f"Feature extraction completed: {processed_count}/{len(objects_to_process)} objects processed in {extraction_run.processing_time_seconds:.1f}s")
+        
+        # Run classifiers on newly processed objects using the classifier manager
+        try:
+            logger.info("Running automated classifiers on newly processed objects...")
+            
+            # Run classifiers for all science cases
+            science_cases = ["anomalous", "snia-like", "ccsn-like", "long-lived", "precursor"]
+            total_classified = 0
+            
+            for science_case in science_cases:
+                try:
+                    classified_objects = classifier_manager.run_classifiers_for_science_case(
+                        db, science_case, extraction_run
+                    )
+                    if classified_objects:
+                        logger.info(f"Classified {len(classified_objects)} objects for {science_case}: {classified_objects}")
+                        total_classified += len(classified_objects)
+                    else:
+                        logger.info(f"No objects classified for {science_case}")
+                except Exception as e:
+                    logger.error(f"Error running classifiers for {science_case}: {e}")
+            
+            logger.info(f"Classifier processing completed: {total_classified} total objects classified across all science cases")
+            
+            # Initialize placeholder pending votes to ensure system works out of the box
+            classifier_manager.create_placeholder_pending_votes(db)
+            
+        except Exception as e:
+            logger.error(f"Error running automated classifiers: {e}")
+            # Don't fail the entire extraction run if classifier processing fails
         
         return extraction_run
         

@@ -1463,4 +1463,61 @@ button, .btn {
 [data-theme="dark"] .target-card {
     background: var(--card-bg);
     border-color: var(--border-color);
+}
+
+/* Classifier Badges */
+.classifier-badge {
+    transition: all 0.2s ease;
+}
+
+.classifier-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.classifier-badge h6 a {
+    color: inherit;
+    font-weight: 600;
+}
+
+.classifier-badge h6 a:hover {
+    text-decoration: underline;
+}
+
+.classifier-badge .badge {
+    font-size: 0.75em;
+    padding: 0.25em 0.5em;
+}
+
+.classifier-badge .small {
+    line-height: 1.4;
+}
+
+/* Classifier badge colors for different types */
+.classifier-badge.border-warning {
+    background: rgba(255, 193, 7, 0.1);
+}
+
+.classifier-badge.border-success {
+    background: rgba(25, 135, 84, 0.1);
+}
+
+.classifier-badge.border-primary {
+    background: rgba(13, 110, 253, 0.1);
+}
+
+/* Dark theme support for classifier badges */
+[data-theme="dark"] .classifier-badge.border-warning {
+    background: rgba(255, 193, 7, 0.2);
+    border-color: #ffc107;
+}
+
+[data-theme="dark"] .classifier-badge.border-success {
+    background: rgba(25, 135, 84, 0.2);
+    border-color: #198754;
+}
+
+[data-theme="dark"] .classifier-badge.border-primary {
+    background: rgba(13, 110, 253, 0.2);
+    border-color: #0d6efd;
 } 

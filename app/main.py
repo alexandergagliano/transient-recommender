@@ -54,6 +54,10 @@ from .security import (
 from .models import User
 from .recommender import WebRecommender, NoObjectsAvailableError
 from .feature_extractor import extract_features_for_recent_objects, get_last_extraction_run, should_run_feature_extraction
+from .pending_votes import get_pending_objects_for_science_case, remove_pending_vote
+from .database import SessionLocal
+from .anomaly_service import anomaly_service
+from .classifier_manager import classifier_manager
 
 # Configure logging
 log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -623,6 +627,14 @@ async def vote(
         db.add(new_vote)
         logger.info(f"Created new {vote_type} vote for {ztfid} by user {current_user.id}")
         vote_action = "added"
+        
+        # Remove any pending votes for this object from the current science case
+        # This ensures that when a user votes on a pending object, it's removed from the pending queue
+        if science_case and science_case != "all":
+            try:
+                remove_pending_vote(db, ztfid, science_case)
+            except Exception as e:
+                logger.warning(f"Could not remove pending vote for {ztfid} from {science_case}: {e}")
     
     # Handle tags from metadata in payload (only if adding a vote, not removing)
     if vote_action == "added":
@@ -1457,7 +1469,6 @@ def run_feature_extraction_background(lookback_days: float, force_reprocess: boo
             logger.info("Antares not available - using test mode for background extraction")
         
         # Get a new database session for the background task
-        from .database import SessionLocal
         db = SessionLocal()
         
         try:
@@ -1557,6 +1568,161 @@ async def get_extraction_status(
         "error_message": last_run.error_message,
         **runtime_info
     }
+
+@api_app.get("/anomaly-notifications")
+async def get_anomaly_notifications(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get unacknowledged anomaly notifications."""
+    try:
+        notifications = anomaly_service.get_unacknowledged_notifications(db)
+        
+        result = []
+        for notification in notifications:
+            result.append({
+                "id": notification.id,
+                "detection_run_id": notification.detection_run_id,
+                "objects_detected": notification.objects_detected,
+                "ztfids_detected": notification.ztfids_detected or [],
+                "created_at": notification.created_at.isoformat(),
+                "acknowledged": notification.acknowledged
+            })
+        
+        return {"notifications": result}
+        
+    except Exception as e:
+        logger.error(f"Error getting anomaly notifications: {e}")
+        return {"notifications": []}
+
+@api_app.post("/anomaly-notifications/{notification_id}/acknowledge")
+async def acknowledge_anomaly_notification(
+    notification_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Acknowledge an anomaly notification."""
+    try:
+        anomaly_service.acknowledge_notification(db, notification_id)
+        return {"status": "success"}
+        
+    except Exception as e:
+        logger.error(f"Error acknowledging notification {notification_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error acknowledging notification: {str(e)}")
+
+@api_app.get("/anomaly-results/{ztfid}")
+async def get_anomaly_result(
+    ztfid: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get anomaly detection result for a specific object."""
+    try:
+        result = db.query(models.AnomalyDetectionResult).filter(
+            models.AnomalyDetectionResult.ztfid == ztfid
+        ).first()
+        
+        if not result:
+            return {"anomaly_result": None}
+        
+        return {
+            "anomaly_result": {
+                "ztfid": result.ztfid,
+                "anomaly_score": result.anomaly_score,
+                "mjd_anom": result.mjd_anom,
+                "anom_scores": result.anom_scores,
+                "norm_scores": result.norm_scores,
+                "detection_threshold": result.detection_threshold,
+                "is_anomalous": result.is_anomalous,
+                "created_at": result.created_at.isoformat(),
+                "updated_at": result.updated_at.isoformat()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting anomaly result for {ztfid}: {e}")
+        return {"anomaly_result": None}
+
+@api_app.get("/pending-objects")
+async def get_pending_objects_summary(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get summary of pending objects for all science cases."""
+    try:
+        # Define all possible science cases
+        science_cases = ["anomalous", "snia-like", "ccsn-like", "long-lived", "precursor"]
+        
+        pending_summary = {}
+        total_pending = 0
+        
+        for science_case in science_cases:
+            pending_objects = get_pending_objects_for_science_case(db, science_case)
+            pending_summary[science_case] = len(pending_objects)
+            total_pending += len(pending_objects)
+        
+        return {
+            "total_pending": total_pending,
+            "by_science_case": pending_summary,
+            "available_science_cases": science_cases
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting pending objects summary: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@api_app.get("/pending-objects/{science_case}")
+async def get_pending_objects_for_science_case_endpoint(
+    science_case: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get detailed list of pending objects for a specific science case."""
+    try:
+        pending_ztfids = get_pending_objects_for_science_case(db, science_case)
+        
+        if not pending_ztfids:
+            return {
+                "science_case": science_case,
+                "count": 0,
+                "objects": []
+            }
+        
+        # Get details for these objects from the feature bank
+        pending_objects = []
+        for ztfid in pending_ztfids:
+            feature = db.query(models.FeatureBank).filter(
+                models.FeatureBank.ztfid == ztfid
+            ).first()
+            
+            obj_details = {
+                "ztfid": ztfid,
+                "ra": feature.ra if feature else None,
+                "dec": feature.dec if feature else None,
+                "latest_magnitude": feature.latest_magnitude if feature else None,
+                "mjd_extracted": feature.mjd_extracted if feature else None
+            }
+            
+            # Add anomaly score if this is for anomalous science case
+            if science_case == "anomalous":
+                anomaly_result = db.query(models.AnomalyDetectionResult).filter(
+                    models.AnomalyDetectionResult.ztfid == ztfid
+                ).first()
+                if anomaly_result:
+                    obj_details["anomaly_score"] = anomaly_result.anomaly_score
+                    obj_details["is_anomalous"] = anomaly_result.is_anomalous
+            
+            pending_objects.append(obj_details)
+        
+        return {
+            "science_case": science_case,
+            "count": len(pending_objects),
+            "objects": pending_objects
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting pending objects for {science_case}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -2144,6 +2310,31 @@ async def should_show_demo(
             'total_votes': 0,
             'demo_threshold': 5,
             'error': 'Error checking vote count'
+        }
+
+@api_app.get("/classifier-badges/{ztfid}")
+async def get_classifier_badges(
+    ztfid: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get classifier badge information for a ZTFID."""
+    try:
+        badges = classifier_manager.get_classifier_badge_info(db, ztfid)
+        
+        return {
+            'ztfid': ztfid,
+            'badges': badges,
+            'total_badges': len(badges)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting classifier badges for {ztfid}: {e}")
+        return {
+            'ztfid': ztfid,
+            'badges': [],
+            'total_badges': 0,
+            'error': 'Error loading classifier information'
         }
 
 @api_app.get("/demo/content")
