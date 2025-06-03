@@ -1473,14 +1473,18 @@ def run_feature_extraction_background(lookback_days: float, force_reprocess: boo
     try:
         logger.info(f"Starting background feature extraction with lookback_days={lookback_days}, force_reprocess={force_reprocess}")
         
-        # Check if Antares is available
+        # Check if Antares is available and working
         try:
             import antares_client
+            from antares_client.search import search
             test_mode = False
             logger.info("Antares available for background extraction")
-        except ImportError:
+        except ImportError as e:
             test_mode = True
-            logger.info("Antares not available - using test mode for background extraction")
+            logger.warning(f"Antares not available - using test mode for background extraction: {e}")
+        except Exception as e:
+            test_mode = True
+            logger.warning(f"Antares import failed - using test mode for background extraction: {e}")
         
         # Get a new database session for the background task
         db = SessionLocal()

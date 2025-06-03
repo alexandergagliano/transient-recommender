@@ -2153,7 +2153,7 @@ async function loadExtractionStatus() {
             
             // Start monitoring if not already running
             if (!extractionProgressInterval) {
-                console.log('🔄 Detected running extraction, starting progress monitoring...');
+                console.log('Detected running extraction, starting progress monitoring...');
                 startExtractionProgressMonitoring();
             }
         } else if (data.status === 'completed') {
@@ -2437,8 +2437,17 @@ function onExtractionComplete(data) {
         `;
     }
     
+    // Re-enable the button and reset its text so users can run extraction again
     if (triggerButton) {
-        triggerButton.style.display = 'none';
+        triggerButton.disabled = false;
+        triggerButton.innerHTML = '<i class="fas fa-cogs"></i> Extract Features';
+        // Show the button if user is admin or it's been a while since last extraction
+        if (window.currentUser?.is_admin) {
+            triggerButton.style.display = 'block';
+        } else {
+            // For non-admins, hide the button and let loadExtractionStatus handle visibility
+            triggerButton.style.display = 'none';
+        }
     }
     
     // Show success notification
@@ -3200,7 +3209,7 @@ async function checkDemoAvailability() {
         }
         
         const data = await response.json();
-        console.log('📊 Demo availability response:', data);
+        console.log('Demo availability response:', data);
         
         if (data.should_show) {
             console.log('✅ Demo should show! Starting immediately...');
@@ -4158,7 +4167,7 @@ function setupStepByStepDemoInteractions(demoObjects) {
             }
             
             // Show congratulations
-            showToast('🎉 Demo completed! Welcome to the classification system!', 'success', 4000);
+            showToast('Demo completed! Welcome to the classification system!', 'success', 4000);
             
             // Refresh recommendations to start real classification
             setTimeout(() => {
@@ -4176,7 +4185,7 @@ function setupStepByStepDemoInteractions(demoObjects) {
     
     // Add helpful hints
     setTimeout(() => {
-        showToast('💡 Tip: Try all the different tag categories to learn the system!', 'info', 4000);
+        showToast('Tip: Try all the different tag categories to learn the system!', 'info', 4000);
     }, 5000);
 }
 
@@ -4212,7 +4221,7 @@ function setupLookbackPresetButtons() {
     const lookbackInput = document.getElementById('lookbackDays');
     
     if (!presetButtons.length) {
-        console.warn('⚠️ No preset buttons found');
+        console.warn('No preset buttons found');
         return;
     }
     
@@ -4236,11 +4245,11 @@ function setupLookbackPresetButtons() {
 
 // Function to set lookback days value
 function setLookbackDays(days) {
-    console.log(`📅 Setting lookback days to: ${days}`);
+    console.log(`Setting lookback days to: ${days}`);
     
     const lookbackInput = document.getElementById('lookbackDays');
     if (!lookbackInput) {
-        console.warn('⚠️ Lookback days input not found');
+        console.warn('Lookback days input not found');
         return;
     }
     
@@ -4267,7 +4276,7 @@ function setupCollapsibleHeaders() {
     const collapsibleHeaders = document.querySelectorAll('.collapsible-header');
     
     if (!collapsibleHeaders.length) {
-        console.warn('⚠️ No collapsible headers found');
+        console.warn('No collapsible headers found');
         return;
     }
     
@@ -4277,7 +4286,7 @@ function setupCollapsibleHeaders() {
         const icon = header.querySelector('.collapse-icon');
         
         if (!targetElement) {
-            console.warn(`⚠️ Target element not found for ${targetId}`);
+            console.warn(`Target element not found for ${targetId}`);
             return;
         }
         
@@ -4327,7 +4336,7 @@ function toggleRealtimeMode() {
     const filterRow = document.getElementById('realtimeFilterRow');
     
     if (!toggle || !label || !description || !filterRow) {
-        console.warn('⚠️ Real-time toggle elements not found');
+        console.warn('Real-time toggle elements not found');
         return;
     }
     
@@ -4339,7 +4348,7 @@ function toggleRealtimeMode() {
         description.textContent = 'Only objects with recent detections';
         filterRow.style.display = 'block';
         console.log('🔴 Switched to real-time recommendations');
-        showToast('🔴 Switched to real-time recommendations', 'warning', 3000);
+        showToast('Switched to real-time recommendations', 'warning', 3000);
     } else {
         // Archival mode
         label.textContent = 'Archival';
@@ -4348,7 +4357,7 @@ function toggleRealtimeMode() {
         description.textContent = 'Search entire archival catalog';
         filterRow.style.display = 'none';
         console.log('📚 Switched to archival recommendations');
-        showToast('📚 Switched to archival recommendations', 'info', 3000);
+        showToast('Switched to archival recommendations', 'info', 3000);
     }
     
     // Update recommendations when mode changes

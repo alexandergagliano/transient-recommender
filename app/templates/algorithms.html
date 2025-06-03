@@ -1,784 +1,627 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="light">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Algorithm Management - Transient Recommender</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/material.min.css" rel="stylesheet">
-    <link href="/static/css/style.css" rel="stylesheet">
-    <style>
-        .nav-tabs .nav-link {
-            color: #212529 !important;
-            font-weight: 500;
+{% extends "base.html" %}
+
+{% block title %}Algorithm Management - Transient Recommender{% endblock %}
+
+{% block extra_head %}
+<link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/material.min.css" rel="stylesheet">
+<style>
+    .nav-tabs .nav-link {
+        color: #212529 !important;
+        font-weight: 500;
+    }
+    .nav-tabs .nav-link:hover {
+        color: #0d6efd !important;
+    }
+    .nav-tabs .nav-link.active {
+        color: #0d6efd !important;
+        font-weight: 600;
+    }
+    .algorithm-card {
+        border-left: 4px solid #e9ecef;
+        transition: all 0.3s ease;
+    }
+    .algorithm-card.enabled {
+        border-left-color: #198754;
+    }
+    .algorithm-card.disabled {
+        border-left-color: #dc3545;
+    }
+    .code-editor {
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+    }
+    .validation-error {
+        border-color: #dc3545 !important;
+    }
+    .validation-success {
+        border-color: #198754 !important;
+    }
+    .add-algorithm-card {
+        border: 2px dashed #dee2e6;
+        background-color: #f8f9fa;
+        transition: all 0.3s ease;
+    }
+    .add-algorithm-card:hover {
+        border-color: #0d6efd;
+        background-color: #e7f1ff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-cogs"></i> Algorithm Management</h2>
+                <div>
+                    <button id="saveConfig" class="btn btn-primary me-2" disabled>
+                        <i class="fas fa-save"></i> Save Configuration
+                    </button>
+                    <button id="resetConfig" class="btn btn-outline-secondary">
+                        <i class="fas fa-undo"></i> Reset Changes
+                    </button>
+                </div>
+            </div>
+
+            <!-- Loading indicator -->
+            <div id="loadingIndicator" class="text-center py-5">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading algorithms...</span>
+                </div>
+                <p class="mt-2">Loading algorithm configuration...</p>
+            </div>
+
+            <!-- Science Case Tabs -->
+            <div id="algorithmTabs" style="display: none;">
+                <ul class="nav nav-tabs" id="scienceCaseTabs" role="tablist">
+                    <!-- Tabs will be populated dynamically -->
+                </ul>
+                
+                <div class="tab-content mt-3" id="scienceCaseTabsContent">
+                    <!-- Tab content will be populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Global Settings -->
+            <div id="globalSettings" class="card mt-4" style="display: none;">
+                <div class="card-header">
+                    <h5><i class="fas fa-globe"></i> Global Algorithm Settings</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="runAfterExtraction" class="form-label">Run After Feature Extraction</label>
+                            <select id="runAfterExtraction" class="form-select">
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="maxConcurrent" class="form-label">Max Concurrent Algorithms</label>
+                            <input type="number" id="maxConcurrent" class="form-control" min="1" max="10">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="logLevel" class="form-label">Log Level</label>
+                            <select id="logLevel" class="form-select">
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="INFO">INFO</option>
+                                <option value="WARNING">WARNING</option>
+                                <option value="ERROR">ERROR</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="cacheResults">
+                                <label class="form-check-label" for="cacheResults">
+                                    Cache Algorithm Results
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cacheDuration" class="form-label">Cache Duration (hours)</label>
+                            <input type="number" id="cacheDuration" class="form-control" min="1" max="168">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Algorithm Modal -->
+<div class="modal fade" id="addAlgorithmModal" tabindex="-1" aria-labelledby="addAlgorithmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addAlgorithmModalLabel">Add New Algorithm</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="newAlgorithmForm">
+                    <input type="hidden" id="newAlgScienceCase" />
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="newAlgName" class="form-label">Algorithm Name *</label>
+                            <input type="text" class="form-control" id="newAlgName" required placeholder="e.g., SUPERPHOT+">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="newAlgUrl" class="form-label">Documentation URL</label>
+                            <input type="url" class="form-control" id="newAlgUrl" placeholder="https://github.com/user/repo">
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <label for="newAlgThreshold" class="form-label">Confidence Threshold (%)</label>
+                            <input type="number" class="form-control" id="newAlgThreshold" value="70" min="0" max="100" step="0.1">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="newAlgPriority" class="form-label">Priority</label>
+                            <select class="form-select" id="newAlgPriority">
+                                <option value="1">High (1)</option>
+                                <option value="2" selected>Medium (2)</option>
+                                <option value="3">Low (3)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <label for="newAlgDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="newAlgDescription" rows="2" placeholder="Brief description of what this algorithm does..."></textarea>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <label for="newAlgCode" class="form-label">Python Code *</label>
+                            <textarea class="form-control" id="newAlgCode" rows="15" required placeholder="def algorithm_function(features, metadata):
+    # Your algorithm code here
+    # Return a confidence score between 0 and 1
+    return 0.5"></textarea>
+                            <small class="form-text text-muted">
+                                Function should accept 'features' (dict) and 'metadata' (dict) parameters and return a confidence score (0-1).
+                            </small>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="newAlgEnabled" checked>
+                                <label class="form-check-label" for="newAlgEnabled">
+                                    Enable algorithm
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="newAlgValidateCode">
+                                <label class="form-check-label" for="newAlgValidateCode">
+                                    Validate code syntax
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="addAlgorithmBtn">Add Algorithm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Algorithm Modal -->
+<div class="modal fade" id="editAlgorithmModal" tabindex="-1" aria-labelledby="editAlgorithmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editAlgorithmModalLabel">Edit Algorithm</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editAlgorithmForm">
+                    <input type="hidden" id="editAlgId" />
+                    <input type="hidden" id="editAlgScienceCase" />
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="editAlgName" class="form-label">Algorithm Name *</label>
+                            <input type="text" class="form-control" id="editAlgName" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editAlgUrl" class="form-label">Documentation URL</label>
+                            <input type="url" class="form-control" id="editAlgUrl">
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <label for="editAlgThreshold" class="form-label">Confidence Threshold (%)</label>
+                            <input type="number" class="form-control" id="editAlgThreshold" min="0" max="100" step="0.1">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editAlgPriority" class="form-label">Priority</label>
+                            <select class="form-select" id="editAlgPriority">
+                                <option value="1">High (1)</option>
+                                <option value="2">Medium (2)</option>
+                                <option value="3">Low (3)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <label for="editAlgDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="editAlgDescription" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <label for="editAlgCode" class="form-label">Python Code *</label>
+                            <textarea class="form-control" id="editAlgCode" rows="15" required></textarea>
+                            <small class="form-text text-muted">
+                                Function should accept 'features' (dict) and 'metadata' (dict) parameters and return a confidence score (0-1).
+                            </small>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="editAlgEnabled">
+                                <label class="form-check-label" for="editAlgEnabled">
+                                    Enable algorithm
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="editAlgValidateCode">
+                                <label class="form-check-label" for="editAlgValidateCode">
+                                    Validate code syntax
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger me-auto" id="deleteAlgorithmBtn">Delete Algorithm</button>
+                <button type="button" class="btn btn-primary" id="updateAlgorithmBtn">Update Algorithm</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
+<script>
+// Algorithm Management JavaScript
+let algorithmConfig = {};
+let hasUnsavedChanges = false;
+let codeEditors = {};
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadAlgorithmConfiguration();
+    setupEventListeners();
+});
+
+function setupEventListeners() {
+    // Save configuration
+    document.getElementById('saveConfig').addEventListener('click', saveConfiguration);
+    
+    // Reset configuration
+    document.getElementById('resetConfig').addEventListener('click', resetConfiguration);
+    
+    // Add algorithm
+    document.getElementById('addAlgorithmBtn').addEventListener('click', addNewAlgorithm);
+    
+    // Update algorithm
+    document.getElementById('updateAlgorithmBtn').addEventListener('click', updateAlgorithm);
+    
+    // Delete algorithm
+    document.getElementById('deleteAlgorithmBtn').addEventListener('click', deleteAlgorithm);
+    
+    // Global settings change tracking
+    ['runAfterExtraction', 'maxConcurrent', 'logLevel', 'cacheResults', 'cacheDuration'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('change', markAsChanged);
         }
-        .nav-tabs .nav-link:hover {
-            color: #0d6efd !important;
+    });
+}
+
+function markAsChanged() {
+    hasUnsavedChanges = true;
+    document.getElementById('saveConfig').disabled = false;
+}
+
+async function loadAlgorithmConfiguration() {
+    try {
+        const response = await fetch('/api/admin/algorithm-config');
+        if (response.ok) {
+            algorithmConfig = await response.json();
+            renderConfiguration();
+            hideLoading();
+        } else {
+            throw new Error('Failed to load configuration');
         }
-        .nav-tabs .nav-link.active {
-            color: #0d6efd !important;
-            font-weight: 600;
-        }
-        .algorithm-card {
-            border-left: 4px solid #e9ecef;
-            transition: all 0.3s ease;
-        }
-        .algorithm-card.enabled {
-            border-left-color: #198754;
-        }
-        .algorithm-card.disabled {
-            border-left-color: #dc3545;
-        }
-        .code-editor {
-            border: 1px solid #dee2e6;
-            border-radius: 0.375rem;
-        }
-        .validation-error {
-            border-color: #dc3545 !important;
-        }
-        .validation-success {
-            border-color: #198754 !important;
-        }
-        .add-algorithm-card {
-            border: 2px dashed #dee2e6;
-            background-color: #f8f9fa;
-            transition: all 0.3s ease;
-        }
-        .add-algorithm-card:hover {
-            border-color: #0d6efd;
-            background-color: #e7f1ff;
-        }
-    </style>
-</head>
-<body>
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg">
-        <div class="container">
-            <a class="navbar-brand" href="/">
-                <i class="fas fa-star"></i> Transient Recommender
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
+    } catch (error) {
+        console.error('Error loading algorithm configuration:', error);
+        showToast('Error loading algorithm configuration', 'error');
+        hideLoading();
+    }
+}
+
+function renderConfiguration() {
+    renderTabs();
+    renderGlobalSettings();
+}
+
+function renderTabs() {
+    const tabsContainer = document.getElementById('scienceCaseTabs');
+    const contentContainer = document.getElementById('scienceCaseTabsContent');
+    
+    tabsContainer.innerHTML = '';
+    contentContainer.innerHTML = '';
+    
+    const scienceCases = Object.keys(algorithmConfig.science_cases || {});
+    
+    scienceCases.forEach((scienceCase, index) => {
+        // Create tab
+        const tab = document.createElement('li');
+        tab.className = 'nav-item';
+        tab.innerHTML = `
+            <button class="nav-link ${index === 0 ? 'active' : ''}" 
+                    id="${scienceCase}-tab" 
+                    data-bs-toggle="tab" 
+                    data-bs-target="#${scienceCase}-content" 
+                    type="button">
+                ${scienceCase.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
             </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/recommendations">Recommendations</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/targets">Targets</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/history">History</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/algorithms">
-                            <i class="fas fa-cogs"></i> Algorithms
-                        </a>
-                    </li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/profile">Profile</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/logout">Logout</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+        `;
+        tabsContainer.appendChild(tab);
+        
+        // Create content
+        const content = document.createElement('div');
+        content.className = `tab-pane fade ${index === 0 ? 'show active' : ''}`;
+        content.id = `${scienceCase}-content`;
+        content.innerHTML = renderScienceCaseContent(scienceCase);
+        contentContainer.appendChild(content);
+    });
+}
 
-    <div class="container mt-4">
+function renderScienceCaseContent(scienceCase) {
+    const algorithms = algorithmConfig.science_cases[scienceCase] || [];
+    
+    let content = `
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4>${scienceCase.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())} Algorithms</h4>
+            <button class="btn btn-success" onclick="showAddAlgorithmModal('${scienceCase}')">
+                <i class="fas fa-plus"></i> Add Algorithm
+            </button>
+        </div>
         <div class="row">
-            <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h2><i class="fas fa-cogs"></i> Algorithm Management</h2>
-                    <div>
-                        <button id="saveConfig" class="btn btn-primary me-2" disabled>
-                            <i class="fas fa-save"></i> Save Configuration
-                        </button>
-                        <button id="resetConfig" class="btn btn-outline-secondary">
-                            <i class="fas fa-undo"></i> Reset Changes
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Loading indicator -->
-                <div id="loadingIndicator" class="text-center py-5">
-                    <div class="spinner-border" role="status">
-                        <span class="visually-hidden">Loading algorithms...</span>
-                    </div>
-                    <p class="mt-2">Loading algorithm configuration...</p>
-                </div>
-
-                <!-- Science Case Tabs -->
-                <div id="algorithmTabs" style="display: none;">
-                    <ul class="nav nav-tabs" id="scienceCaseTabs" role="tablist">
-                        <!-- Tabs will be populated dynamically -->
-                    </ul>
-                    
-                    <div class="tab-content mt-3" id="scienceCaseTabsContent">
-                        <!-- Tab content will be populated dynamically -->
-                    </div>
-                </div>
-
-                <!-- Global Settings -->
-                <div id="globalSettings" class="card mt-4" style="display: none;">
-                    <div class="card-header">
-                        <h5><i class="fas fa-globe"></i> Global Algorithm Settings</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-4">
-                                <label for="runAfterExtraction" class="form-label">Run After Feature Extraction</label>
-                                <select id="runAfterExtraction" class="form-select">
-                                    <option value="true">Yes</option>
-                                    <option value="false">No</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="maxConcurrent" class="form-label">Max Concurrent Algorithms</label>
-                                <input type="number" id="maxConcurrent" class="form-control" min="1" max="10">
-                            </div>
-                            <div class="col-md-4">
-                                <label for="logLevel" class="form-label">Log Level</label>
-                                <select id="logLevel" class="form-select">
-                                    <option value="DEBUG">DEBUG</option>
-                                    <option value="INFO">INFO</option>
-                                    <option value="WARNING">WARNING</option>
-                                    <option value="ERROR">ERROR</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-md-6">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="cacheResults">
-                                    <label class="form-check-label" for="cacheResults">
-                                        Cache Algorithm Results
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="cacheDuration" class="form-label">Cache Duration (hours)</label>
-                                <input type="number" id="cacheDuration" class="form-control" min="1" max="168">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Add Algorithm Modal -->
-    <div class="modal fade" id="addAlgorithmModal" tabindex="-1" aria-labelledby="addAlgorithmModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="addAlgorithmModalLabel">Add New Algorithm</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="newAlgorithmForm">
-                        <input type="hidden" id="newAlgScienceCase" />
-                        <div class="row">
-                            <div class="col-md-6">
-                                <label for="newAlgName" class="form-label">Algorithm Name *</label>
-                                <input type="text" class="form-control" id="newAlgName" required placeholder="e.g., SUPERPHOT+">
-                            </div>
-                            <div class="col-md-6">
-                                <label for="newAlgUrl" class="form-label">Documentation URL</label>
-                                <input type="url" class="form-control" id="newAlgUrl" placeholder="https://github.com/user/repo">
-                            </div>
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-md-6">
-                                <label for="newAlgThreshold" class="form-label">Confidence Threshold (%)</label>
-                                <input type="number" class="form-control" id="newAlgThreshold" value="70" min="0" max="100" step="0.1">
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-check form-switch mt-4">
-                                    <input class="form-check-input" type="checkbox" id="newAlgEnabled">
-                                    <label class="form-check-label" for="newAlgEnabled">
-                                        Enable Algorithm
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <label for="newAlgDescription" class="form-label">Description</label>
-                                <input type="text" class="form-control" id="newAlgDescription" placeholder="Brief description of the algorithm">
-                            </div>
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <label for="newAlgCode" class="form-label">Python Function *</label>
-                                <div class="alert alert-info">
-                                    <strong>Requirements:</strong> Write a standalone function named exactly the same as your algorithm name.
-                                    The function must take <code>ztfid</code> and <code>confidence_threshold</code> as parameters and return a dictionary with <code>"label"</code> and <code>"score"</code> keys.
-                                </div>
-                                <textarea id="newAlgCode" class="form-control" rows="15" required placeholder="def your_algorithm_name(ztfid, confidence_threshold):
-    # Your algorithm implementation here
-    # Use confidence_threshold instead of hardcoding values
-    # Must return: {'label': 'Classification', 'score': confidence_percentage}
-    return {'label': 'Unknown', 'score': 0.0}"></textarea>
-                                <div id="codeValidation" class="mt-2"></div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="saveNewAlgorithm">
-                        <i class="fas fa-plus"></i> Add Algorithm
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Toast Container -->
-    <div class="toast-container position-fixed bottom-0 end-0 p-3">
-        <!-- Toasts will be added here -->
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
-    <script>
-        let originalConfig = null;
-        let currentConfig = null;
-        let hasUnsavedChanges = false;
-        let codeEditor = null;
-
-        // Load configuration on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            loadAlgorithmConfig();
-            setupEventListeners();
-            setupCodeEditor();
-        });
-
-        function setupEventListeners() {
-            document.getElementById('saveConfig').addEventListener('click', saveConfiguration);
-            document.getElementById('resetConfig').addEventListener('click', resetConfiguration);
-            document.getElementById('saveNewAlgorithm').addEventListener('click', saveNewAlgorithm);
-            
-            // Track changes to enable/disable save button
-            document.addEventListener('change', function(e) {
-                if (e.target.matches('.algorithm-setting')) {
-                    markConfigurationChanged();
-                }
-            });
-
-            // Code validation
-            document.getElementById('newAlgCode').addEventListener('input', validatePythonCode);
-            document.getElementById('newAlgName').addEventListener('input', validatePythonCode);
-        }
-
-        function setupCodeEditor() {
-            const textarea = document.getElementById('newAlgCode');
-            codeEditor = CodeMirror.fromTextArea(textarea, {
-                mode: 'python',
-                theme: 'material',
-                lineNumbers: true,
-                indentUnit: 4,
-                autoCloseBrackets: true,
-                matchBrackets: true,
-                lineWrapping: true
-            });
-            
-            codeEditor.on('change', validatePythonCode);
-        }
-
-        function validatePythonCode() {
-            const algorithmName = document.getElementById('newAlgName').value.trim();
-            const code = codeEditor ? codeEditor.getValue() : document.getElementById('newAlgCode').value;
-            const validationDiv = document.getElementById('codeValidation');
-            const saveButton = document.getElementById('saveNewAlgorithm');
-            
-            if (!algorithmName || !code.trim()) {
-                validationDiv.innerHTML = '';
-                saveButton.disabled = true;
-                return;
-            }
-
-            const errors = [];
-            
-            // Check if function name matches algorithm name (case-insensitive, allowing underscores)
-            const expectedFuncName = algorithmName.toLowerCase().replace(/[^a-z0-9]/g, '_');
-            const funcDefRegex = new RegExp(`def\\s+${expectedFuncName}\\s*\\(`, 'i');
-            if (!funcDefRegex.test(code)) {
-                errors.push(`Function must be named '${expectedFuncName}' to match algorithm name '${algorithmName}'`);
-            }
-            
-            // Check if function takes both required parameters
-            if (!code.includes('ztfid')) {
-                errors.push('Function must accept "ztfid" as first parameter');
-            }
-            if (!code.includes('confidence_threshold')) {
-                errors.push('Function must accept "confidence_threshold" as second parameter');
-            }
-            
-            // Check if function returns dictionary with label and score
-            if (!code.includes('return') || (!code.includes('"label"') && !code.includes("'label'"))) {
-                errors.push('Function must return a dictionary with "label" key');
-            }
-            
-            if (!code.includes('"score"') && !code.includes("'score'")) {
-                errors.push('Function must return a dictionary with "score" key');
-            }
-            
-            // Basic Python syntax check (very simple)
-            const lines = code.split('\n');
-            let indentationError = false;
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                if (line.trim() && !line.startsWith(' ') && !line.startsWith('\t') && !line.startsWith('def') && !line.startsWith('#')) {
-                    if (i > 0) { // Allow first line to not be indented if it's the function definition
-                        indentationError = true;
-                        break;
-                    }
-                }
-            }
-            if (indentationError) {
-                errors.push('All code must be properly indented within the function');
-            }
-            
-            if (errors.length > 0) {
-                validationDiv.innerHTML = `
-                    <div class="alert alert-danger">
-                        <strong>Validation Errors:</strong>
-                        <ul class="mb-0 mt-2">
-                            ${errors.map(error => `<li>${error}</li>`).join('')}
-                        </ul>
-                    </div>
-                `;
-                saveButton.disabled = true;
-                if (codeEditor) {
-                    codeEditor.getWrapperElement().classList.add('validation-error');
-                    codeEditor.getWrapperElement().classList.remove('validation-success');
-                }
-            } else {
-                validationDiv.innerHTML = `
-                    <div class="alert alert-success">
-                        <i class="fas fa-check-circle"></i> Function validation passed!
-                    </div>
-                `;
-                saveButton.disabled = false;
-                if (codeEditor) {
-                    codeEditor.getWrapperElement().classList.add('validation-success');
-                    codeEditor.getWrapperElement().classList.remove('validation-error');
-                }
-            }
-        }
-
-        async function loadAlgorithmConfig() {
-            try {
-                const response = await fetch('/api/admin/algorithm-config');
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const config = await response.json();
-                originalConfig = JSON.parse(JSON.stringify(config)); // Deep copy
-                currentConfig = config;
-                
-                renderConfiguration(config);
-                document.getElementById('loadingIndicator').style.display = 'none';
-                document.getElementById('algorithmTabs').style.display = 'block';
-                document.getElementById('globalSettings').style.display = 'block';
-                
-            } catch (error) {
-                console.error('Error loading algorithm configuration:', error);
-                showToast('Error loading algorithm configuration', 'error');
-                document.getElementById('loadingIndicator').innerHTML = 
-                    '<div class="alert alert-danger">Failed to load algorithm configuration. Please refresh the page.</div>';
-            }
-        }
-
-        function renderConfiguration(config) {
-            renderScienceCaseTabs(config.filters);
-            renderGlobalSettings(config.settings);
-        }
-
-        function renderScienceCaseTabs(filters) {
-            const tabsContainer = document.getElementById('scienceCaseTabs');
-            const contentContainer = document.getElementById('scienceCaseTabsContent');
-            
-            tabsContainer.innerHTML = '';
-            contentContainer.innerHTML = '';
-            
-            const scienceCases = Object.keys(filters);
-            
-            scienceCases.forEach((scienceCase, index) => {
-                const isActive = index === 0;
-                const tabId = `tab-${scienceCase}`;
-                const contentId = `content-${scienceCase}`;
-                
-                // Create tab
-                const tab = document.createElement('li');
-                tab.className = 'nav-item';
-                tab.innerHTML = `
-                    <button class="nav-link ${isActive ? 'active' : ''}" 
-                            id="${tabId}" 
-                            data-bs-toggle="tab" 
-                            data-bs-target="#${contentId}" 
-                            type="button" 
-                            role="tab">
-                        ${formatScienceCaseName(scienceCase)}
-                    </button>
-                `;
-                tabsContainer.appendChild(tab);
-                
-                // Create tab content
-                const content = document.createElement('div');
-                content.className = `tab-pane fade ${isActive ? 'show active' : ''}`;
-                content.id = contentId;
-                content.role = 'tabpanel';
-                content.innerHTML = renderScienceCaseContent(scienceCase, filters[scienceCase]);
-                contentContainer.appendChild(content);
-            });
-        }
-
-        function renderScienceCaseContent(scienceCase, algorithms) {
-            let html = `
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h4>${formatScienceCaseName(scienceCase)} Algorithms</h4>
-                    <div>
-                        <span class="badge bg-secondary me-2">${algorithms.length} algorithm${algorithms.length !== 1 ? 's' : ''}</span>
-                        <button class="btn btn-outline-primary btn-sm" onclick="openAddAlgorithmModal('${scienceCase}')">
-                            <i class="fas fa-plus"></i> Add Algorithm
-                        </button>
-                    </div>
-                </div>
-            `;
-            
-            if (algorithms.length === 0) {
-                html += `
-                    <div class="card add-algorithm-card text-center py-5" onclick="openAddAlgorithmModal('${scienceCase}')" style="cursor: pointer;">
-                        <div class="card-body">
-                            <i class="fas fa-plus-circle fa-3x text-muted mb-3"></i>
-                            <h5 class="text-muted">No algorithms configured</h5>
-                            <p class="text-muted">Click here to add your first algorithm for ${formatScienceCaseName(scienceCase)} objects</p>
-                        </div>
-                    </div>
-                `;
-            } else {
-                algorithms.forEach((algorithm, index) => {
-                    html += renderAlgorithmCard(scienceCase, algorithm, index);
-                });
-            }
-            
-            return html;
-        }
-
-        function renderAlgorithmCard(scienceCase, algorithm, index) {
-            const isEnabled = algorithm.enabled || false;
-            const cardClass = isEnabled ? 'enabled' : 'disabled';
-            const statusClass = isEnabled ? 'bg-success' : 'bg-warning';
-            const statusText = isEnabled ? 'Enabled' : 'Disabled';
-            
-            return `
-                <div class="card algorithm-card ${cardClass} mb-3">
+    `;
+    
+    algorithms.forEach(algorithm => {
+        content += `
+            <div class="col-md-6 mb-3">
+                <div class="card algorithm-card ${algorithm.enabled ? 'enabled' : 'disabled'}">
                     <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">${algorithm.name}</h6>
                         <div>
-                            <h6 class="mb-0">
-                                <a href="${algorithm.url || '#'}" target="_blank" class="text-decoration-none">
-                                    ${algorithm.name || 'Unnamed Algorithm'}
-                                </a>
-                            </h6>
-                            <small class="text-muted">${algorithm.description || 'No description available'}</small>
-                        </div>
-                        <div>
-                            <span class="badge ${statusClass} me-2">${statusText}</span>
-                            <button class="btn btn-outline-danger btn-sm" onclick="removeAlgorithm('${scienceCase}', ${index})">
-                                <i class="fas fa-trash"></i>
+                            <span class="badge bg-${algorithm.enabled ? 'success' : 'secondary'} me-2">
+                                ${algorithm.enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editAlgorithm('${scienceCase}', ${algorithm.id})">
+                                <i class="fas fa-edit"></i>
                             </button>
                         </div>
                     </div>
                     <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-3">
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input algorithm-setting" 
-                                           type="checkbox" 
-                                           id="enabled-${scienceCase}-${index}"
-                                           data-science-case="${scienceCase}"
-                                           data-algorithm-index="${index}"
-                                           data-field="enabled"
-                                           ${isEnabled ? 'checked' : ''}>
-                                    <label class="form-check-label" for="enabled-${scienceCase}-${index}">
-                                        Enable Algorithm
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <label for="threshold-${scienceCase}-${index}" class="form-label">Confidence Threshold (%)</label>
-                                <input type="number" 
-                                       class="form-control algorithm-setting" 
-                                       id="threshold-${scienceCase}-${index}"
-                                       data-science-case="${scienceCase}"
-                                       data-algorithm-index="${index}"
-                                       data-field="confidence_threshold"
-                                       value="${algorithm.confidence_threshold || 50}" 
-                                       min="0" 
-                                       max="100" 
-                                       step="0.1">
-                            </div>
-                            <div class="col-md-3">
-                                <label for="url-${scienceCase}-${index}" class="form-label">Documentation URL</label>
-                                <input type="url" 
-                                       class="form-control algorithm-setting" 
-                                       id="url-${scienceCase}-${index}"
-                                       data-science-case="${scienceCase}"
-                                       data-algorithm-index="${index}"
-                                       data-field="url"
-                                       value="${algorithm.url || ''}" 
-                                       placeholder="https://github.com/user/repo">
-                            </div>
-                            <div class="col-md-3">
-                                <label for="description-${scienceCase}-${index}" class="form-label">Description</label>
-                                <input type="text" 
-                                       class="form-control algorithm-setting" 
-                                       id="description-${scienceCase}-${index}"
-                                       data-science-case="${scienceCase}"
-                                       data-algorithm-index="${index}"
-                                       data-field="description"
-                                       value="${algorithm.description || ''}" 
-                                       placeholder="Brief description of the algorithm">
-                            </div>
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <label class="form-label">Python Function</label>
-                                <div class="code-editor">
-                                    <pre class="bg-light p-3 rounded" style="max-height: 200px; overflow-y: auto;"><code>${algorithm.python_code || 'No code defined'}</code></pre>
-                                </div>
-                                <button class="btn btn-outline-secondary btn-sm mt-2" onclick="editAlgorithmCode('${scienceCase}', ${index})">
-                                    <i class="fas fa-edit"></i> Edit Code
-                                </button>
-                            </div>
+                        <p class="small text-muted">${algorithm.description || 'No description provided'}</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small>Threshold: ${algorithm.threshold}%</small>
+                            <small>Priority: ${algorithm.priority}</small>
+                            ${algorithm.url ? `<a href="${algorithm.url}" target="_blank" class="small"><i class="fas fa-external-link-alt"></i> Docs</a>` : ''}
                         </div>
                     </div>
                 </div>
-            `;
-        }
+            </div>
+        `;
+    });
+    
+    content += `
+            <div class="col-md-6 mb-3">
+                <div class="card add-algorithm-card h-100 d-flex align-items-center justify-content-center" 
+                     onclick="showAddAlgorithmModal('${scienceCase}')" 
+                     style="cursor: pointer; min-height: 150px;">
+                    <div class="text-center">
+                        <i class="fas fa-plus fa-2x text-muted mb-2"></i>
+                        <p class="text-muted mb-0">Add New Algorithm</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    return content;
+}
 
-        function openAddAlgorithmModal(scienceCase) {
-            document.getElementById('newAlgScienceCase').value = scienceCase;
-            document.getElementById('addAlgorithmModalLabel').textContent = `Add Algorithm to ${formatScienceCaseName(scienceCase)}`;
-            
-            // Reset form
-            document.getElementById('newAlgorithmForm').reset();
-            document.getElementById('newAlgThreshold').value = 70;
-            if (codeEditor) {
-                codeEditor.setValue('');
-            }
-            document.getElementById('codeValidation').innerHTML = '';
-            document.getElementById('saveNewAlgorithm').disabled = true;
-            
-            new bootstrap.Modal(document.getElementById('addAlgorithmModal')).show();
-        }
+function renderGlobalSettings() {
+    const settings = algorithmConfig.global_settings || {};
+    
+    document.getElementById('runAfterExtraction').value = settings.run_after_extraction || 'true';
+    document.getElementById('maxConcurrent').value = settings.max_concurrent || 3;
+    document.getElementById('logLevel').value = settings.log_level || 'INFO';
+    document.getElementById('cacheResults').checked = settings.cache_results || false;
+    document.getElementById('cacheDuration').value = settings.cache_duration_hours || 24;
+}
 
-        function saveNewAlgorithm() {
-            const scienceCase = document.getElementById('newAlgScienceCase').value;
-            const name = document.getElementById('newAlgName').value.trim();
-            const url = document.getElementById('newAlgUrl').value.trim();
-            const threshold = parseFloat(document.getElementById('newAlgThreshold').value);
-            const enabled = document.getElementById('newAlgEnabled').checked;
-            const description = document.getElementById('newAlgDescription').value.trim();
-            const pythonCode = codeEditor ? codeEditor.getValue() : document.getElementById('newAlgCode').value;
-            
-            if (!name || !pythonCode.trim()) {
-                showToast('Please fill in all required fields', 'error');
-                return;
-            }
-            
-            const newAlgorithm = {
-                name: name,
-                description: description || `${name} filtering algorithm`,
-                url: url || '#',
-                enabled: enabled,
-                confidence_threshold: threshold,
-                module: "app.custom_classifiers",  // Backend will handle this
-                function: name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-                python_code: pythonCode
-            };
-            
-            if (!currentConfig.filters[scienceCase]) {
-                currentConfig.filters[scienceCase] = [];
-            }
-            
-            currentConfig.filters[scienceCase].push(newAlgorithm);
-            
-            renderConfiguration(currentConfig);
-            markConfigurationChanged();
-            
-            bootstrap.Modal.getInstance(document.getElementById('addAlgorithmModal')).hide();
-            showToast(`Algorithm "${name}" added successfully!`, 'success');
-        }
+function showAddAlgorithmModal(scienceCase) {
+    document.getElementById('newAlgScienceCase').value = scienceCase;
+    document.getElementById('addAlgorithmModalLabel').textContent = `Add Algorithm for ${scienceCase.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}`;
+    
+    // Reset form
+    document.getElementById('newAlgorithmForm').reset();
+    document.getElementById('newAlgEnabled').checked = true;
+    document.getElementById('newAlgThreshold').value = 70;
+    document.getElementById('newAlgPriority').value = 2;
+    
+    new bootstrap.Modal(document.getElementById('addAlgorithmModal')).show();
+}
 
-        function removeAlgorithm(scienceCase, index) {
-            const algorithm = currentConfig.filters[scienceCase][index];
-            if (confirm(`Are you sure you want to remove "${algorithm.name}"?`)) {
-                currentConfig.filters[scienceCase].splice(index, 1);
-                renderConfiguration(currentConfig);
-                markConfigurationChanged();
-                showToast(`Algorithm "${algorithm.name}" removed`, 'info');
-            }
-        }
+function editAlgorithm(scienceCase, algorithmId) {
+    const algorithm = algorithmConfig.science_cases[scienceCase].find(alg => alg.id === algorithmId);
+    if (!algorithm) return;
+    
+    document.getElementById('editAlgId').value = algorithmId;
+    document.getElementById('editAlgScienceCase').value = scienceCase;
+    document.getElementById('editAlgName').value = algorithm.name;
+    document.getElementById('editAlgUrl').value = algorithm.url || '';
+    document.getElementById('editAlgThreshold').value = algorithm.threshold;
+    document.getElementById('editAlgPriority').value = algorithm.priority;
+    document.getElementById('editAlgDescription').value = algorithm.description || '';
+    document.getElementById('editAlgCode').value = algorithm.code || '';
+    document.getElementById('editAlgEnabled').checked = algorithm.enabled;
+    
+    new bootstrap.Modal(document.getElementById('editAlgorithmModal')).show();
+}
 
-        function editAlgorithmCode(scienceCase, index) {
-            // This would open the same modal but in edit mode
-            // For brevity, implementing as alert for now
-            alert('Code editing feature - would open modal with current code pre-filled');
-        }
+async function addNewAlgorithm() {
+    const form = document.getElementById('newAlgorithmForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const scienceCase = document.getElementById('newAlgScienceCase').value;
+    const newAlgorithm = {
+        id: Date.now(), // Simple ID generation
+        name: document.getElementById('newAlgName').value,
+        url: document.getElementById('newAlgUrl').value,
+        threshold: parseFloat(document.getElementById('newAlgThreshold').value),
+        priority: parseInt(document.getElementById('newAlgPriority').value),
+        description: document.getElementById('newAlgDescription').value,
+        code: document.getElementById('newAlgCode').value,
+        enabled: document.getElementById('newAlgEnabled').checked
+    };
+    
+    if (!algorithmConfig.science_cases[scienceCase]) {
+        algorithmConfig.science_cases[scienceCase] = [];
+    }
+    
+    algorithmConfig.science_cases[scienceCase].push(newAlgorithm);
+    markAsChanged();
+    renderTabs();
+    
+    bootstrap.Modal.getInstance(document.getElementById('addAlgorithmModal')).hide();
+    showToast('Algorithm added successfully', 'success');
+}
 
-        function renderGlobalSettings(settings) {
-            document.getElementById('runAfterExtraction').value = settings.run_after_feature_extraction ? 'true' : 'false';
-            document.getElementById('maxConcurrent').value = settings.max_concurrent_filters || 3;
-            document.getElementById('logLevel').value = settings.log_level || 'INFO';
-            document.getElementById('cacheResults').checked = settings.cache_results || false;
-            document.getElementById('cacheDuration').value = settings.cache_duration_hours || 24;
-            
-            // Add change listeners for global settings
-            ['runAfterExtraction', 'maxConcurrent', 'logLevel', 'cacheResults', 'cacheDuration'].forEach(id => {
-                document.getElementById(id).addEventListener('change', markConfigurationChanged);
-            });
-        }
+async function updateAlgorithm() {
+    const form = document.getElementById('editAlgorithmForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const scienceCase = document.getElementById('editAlgScienceCase').value;
+    const algorithmId = parseInt(document.getElementById('editAlgId').value);
+    
+    const algorithm = algorithmConfig.science_cases[scienceCase].find(alg => alg.id === algorithmId);
+    if (!algorithm) return;
+    
+    algorithm.name = document.getElementById('editAlgName').value;
+    algorithm.url = document.getElementById('editAlgUrl').value;
+    algorithm.threshold = parseFloat(document.getElementById('editAlgThreshold').value);
+    algorithm.priority = parseInt(document.getElementById('editAlgPriority').value);
+    algorithm.description = document.getElementById('editAlgDescription').value;
+    algorithm.code = document.getElementById('editAlgCode').value;
+    algorithm.enabled = document.getElementById('editAlgEnabled').checked;
+    
+    markAsChanged();
+    renderTabs();
+    
+    bootstrap.Modal.getInstance(document.getElementById('editAlgorithmModal')).hide();
+    showToast('Algorithm updated successfully', 'success');
+}
 
-        function markConfigurationChanged() {
-            hasUnsavedChanges = true;
-            document.getElementById('saveConfig').disabled = false;
-            
-            // Update current config with changes
-            updateCurrentConfigFromForm();
-        }
+async function deleteAlgorithm() {
+    if (!confirm('Are you sure you want to delete this algorithm?')) return;
+    
+    const scienceCase = document.getElementById('editAlgScienceCase').value;
+    const algorithmId = parseInt(document.getElementById('editAlgId').value);
+    
+    algorithmConfig.science_cases[scienceCase] = algorithmConfig.science_cases[scienceCase].filter(
+        alg => alg.id !== algorithmId
+    );
+    
+    markAsChanged();
+    renderTabs();
+    
+    bootstrap.Modal.getInstance(document.getElementById('editAlgorithmModal')).hide();
+    showToast('Algorithm deleted successfully', 'success');
+}
 
-        function updateCurrentConfigFromForm() {
-            // Update algorithm settings
-            document.querySelectorAll('.algorithm-setting').forEach(input => {
-                const scienceCase = input.dataset.scienceCase;
-                const algorithmIndex = parseInt(input.dataset.algorithmIndex);
-                const field = input.dataset.field;
-                
-                if (currentConfig.filters[scienceCase] && currentConfig.filters[scienceCase][algorithmIndex]) {
-                    let value = input.value;
-                    
-                    // Convert types as needed
-                    if (field === 'enabled') {
-                        value = input.checked;
-                    } else if (field === 'confidence_threshold') {
-                        value = parseFloat(value);
-                    }
-                    
-                    currentConfig.filters[scienceCase][algorithmIndex][field] = value;
-                }
-            });
-            
-            // Update global settings
-            currentConfig.settings.run_after_feature_extraction = document.getElementById('runAfterExtraction').value === 'true';
-            currentConfig.settings.max_concurrent_filters = parseInt(document.getElementById('maxConcurrent').value);
-            currentConfig.settings.log_level = document.getElementById('logLevel').value;
-            currentConfig.settings.cache_results = document.getElementById('cacheResults').checked;
-            currentConfig.settings.cache_duration_hours = parseInt(document.getElementById('cacheDuration').value);
-        }
-
-        async function saveConfiguration() {
-            try {
-                document.getElementById('saveConfig').disabled = true;
-                document.getElementById('saveConfig').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-                
-                updateCurrentConfigFromForm();
-                
-                const response = await fetch('/api/admin/algorithm-config', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(currentConfig)
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const result = await response.json();
-                
-                // Update original config to new saved state
-                originalConfig = JSON.parse(JSON.stringify(currentConfig));
-                hasUnsavedChanges = false;
-                
-                showToast('Algorithm configuration saved successfully!', 'success');
-                
-            } catch (error) {
-                console.error('Error saving configuration:', error);
-                showToast('Error saving configuration: ' + error.message, 'error');
-            } finally {
-                document.getElementById('saveConfig').disabled = hasUnsavedChanges === false;
-                document.getElementById('saveConfig').innerHTML = '<i class="fas fa-save"></i> Save Configuration';
-            }
-        }
-
-        function resetConfiguration() {
-            if (hasUnsavedChanges && !confirm('Are you sure you want to discard all unsaved changes?')) {
-                return;
-            }
-            
-            currentConfig = JSON.parse(JSON.stringify(originalConfig));
-            renderConfiguration(currentConfig);
+async function saveConfiguration() {
+    try {
+        // Update global settings
+        algorithmConfig.global_settings = {
+            run_after_extraction: document.getElementById('runAfterExtraction').value === 'true',
+            max_concurrent: parseInt(document.getElementById('maxConcurrent').value),
+            log_level: document.getElementById('logLevel').value,
+            cache_results: document.getElementById('cacheResults').checked,
+            cache_duration_hours: parseInt(document.getElementById('cacheDuration').value)
+        };
+        
+        const response = await fetch('/api/admin/algorithm-config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(algorithmConfig)
+        });
+        
+        if (response.ok) {
             hasUnsavedChanges = false;
             document.getElementById('saveConfig').disabled = true;
-            
-            showToast('Configuration reset to last saved state', 'info');
+            showToast('Configuration saved successfully', 'success');
+        } else {
+            throw new Error('Failed to save configuration');
         }
+    } catch (error) {
+        console.error('Error saving configuration:', error);
+        showToast('Error saving configuration', 'error');
+    }
+}
 
-        function formatScienceCaseName(scienceCase) {
-            return scienceCase
-                .split('-')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(' ');
-        }
+function resetConfiguration() {
+    if (hasUnsavedChanges && !confirm('Are you sure you want to reset all changes?')) return;
+    
+    loadAlgorithmConfiguration();
+    hasUnsavedChanges = false;
+    document.getElementById('saveConfig').disabled = true;
+    showToast('Configuration reset', 'info');
+}
 
-        function showToast(message, type = 'info') {
-            const toastContainer = document.querySelector('.toast-container');
-            const toastId = 'toast-' + Date.now();
-            
-            const toastHtml = `
-                <div id="${toastId}" class="toast align-items-center text-bg-${type === 'error' ? 'danger' : type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
-                    <div class="d-flex">
-                        <div class="toast-body">
-                            ${message}
-                        </div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                    </div>
-                </div>
-            `;
-            
-            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-            
-            const toastElement = document.getElementById(toastId);
-            const toast = new bootstrap.Toast(toastElement);
-            toast.show();
-            
-            // Remove toast element after it's hidden
-            toastElement.addEventListener('hidden.bs.toast', () => {
-                toastElement.remove();
-            });
-        }
+function hideLoading() {
+    document.getElementById('loadingIndicator').style.display = 'none';
+    document.getElementById('algorithmTabs').style.display = 'block';
+    document.getElementById('globalSettings').style.display = 'block';
+}
 
-        // Warn about unsaved changes when leaving page
-        window.addEventListener('beforeunload', function(e) {
-            if (hasUnsavedChanges) {
-                e.preventDefault();
-                e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
-                return e.returnValue;
-            }
-        });
-    </script>
-</body>
-</html> 
+function showToast(message, type) {
+    // Use the existing showToast function from app.js if available
+    if (typeof window.showToast === 'function') {
+        window.showToast(message, type);
+    } else {
+        // Fallback alert
+        alert(message);
+    }
+}
+</script>
+{% endblock %} 
