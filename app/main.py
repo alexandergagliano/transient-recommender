@@ -69,8 +69,16 @@ logger = logging.getLogger(__name__)
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 
-# Main app for browser routes
-app = FastAPI(title="Transient Recommender API")
+# Main app for browser routes - configure for proxy
+app = FastAPI(
+    title="Transient Recommender API",
+    # Configure for reverse proxy
+    root_path="",
+    servers=[
+        {"url": "https://transientrecommender.org", "description": "Production server"},
+        {"url": "http://localhost:8080", "description": "Development server"}
+    ]
+)
 
 # API sub-app (no CSRF)
 api_app = FastAPI()
@@ -104,10 +112,26 @@ class ApacheProxyHeadersMiddleware(BaseHTTPMiddleware):
             forwarded_proto = request.headers["X-Forwarded-Proto"]
             if forwarded_proto == "https":
                 request.scope["scheme"] = "https"
+                # Also update the server info to reflect HTTPS
+                if "server" in request.scope:
+                    server = list(request.scope["server"])
+                    server[1] = 443  # HTTPS port
+                    request.scope["server"] = tuple(server)
         
         # Also check for other common Apache headers
         if "X-Forwarded-SSL" in request.headers and request.headers["X-Forwarded-SSL"] == "on":
             request.scope["scheme"] = "https"
+            if "server" in request.scope:
+                server = list(request.scope["server"])
+                server[1] = 443  # HTTPS port
+                request.scope["server"] = tuple(server)
+        
+        # Handle X-Forwarded-Host
+        if "X-Forwarded-Host" in request.headers:
+            request.scope["headers"] = [
+                (k, v) for k, v in request.scope["headers"] 
+                if k != b"host"
+            ] + [(b"host", request.headers["X-Forwarded-Host"].encode())]
             
         response = await call_next(request)
         return response
