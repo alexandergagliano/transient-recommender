@@ -38,13 +38,19 @@
         border-color: #198754 !important;
     }
     .add-algorithm-card {
-        border: 2px dashed #dee2e6;
+        border: 2px dashed #dee2e6 !important;
         background-color: #f8f9fa;
         transition: all 0.3s ease;
     }
     .add-algorithm-card:hover {
-        border-color: #0d6efd;
+        border-color: #0d6efd !important;
         background-color: #e7f1ff;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .algorithm-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 </style>
 {% endblock %}
@@ -397,36 +403,40 @@ function renderScienceCaseContent(scienceCase) {
     const algorithms = algorithmConfig.filters[scienceCase] || [];
     
     let content = `
-        <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="mb-4">
             <h4>${scienceCase.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())} Algorithms</h4>
-            <button class="btn btn-success" onclick="showAddAlgorithmModal('${scienceCase}')">
-                <i class="fas fa-plus"></i> Add Algorithm
-            </button>
         </div>
-        <div class="row">
     `;
     
     algorithms.forEach(algorithm => {
         content += `
-            <div class="col-12 mb-3">
+            <div class="mb-3">
                 <div class="card algorithm-card ${algorithm.enabled ? 'enabled' : 'disabled'}">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <div class="d-flex align-items-center">
-                            <h6 class="mb-0 me-3">${algorithm.name}</h6>
+                        <h6 class="mb-0">${algorithm.name}</h6>
+                        <div>
                             <span class="badge bg-${algorithm.enabled ? 'success' : 'secondary'} me-2">
                                 ${algorithm.enabled ? 'Enabled' : 'Disabled'}
                             </span>
-                            <small class="text-muted me-2">Threshold: ${algorithm.threshold}%</small>
-                            <small class="text-muted me-2">Priority: ${algorithm.priority}</small>
-                            ${algorithm.url ? `<a href="${algorithm.url}" target="_blank" class="small me-2"><i class="fas fa-external-link-alt"></i> Docs</a>` : ''}
+                            <button class="btn btn-sm btn-outline-primary" onclick="editAlgorithm('${scienceCase}', ${algorithm.id})">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
                         </div>
-                        <button class="btn btn-sm btn-outline-primary" onclick="editAlgorithm('${scienceCase}', ${algorithm.id})">
-                            <i class="fas fa-edit"></i> Edit
-                        </button>
                     </div>
                     <div class="card-body">
-                        <p class="small text-muted mb-2">${algorithm.description || 'No description provided'}</p>
-                        ${algorithm.code ? `<pre class="bg-light p-2 small mb-0" style="max-height: 200px; overflow-y: auto;"><code>${algorithm.code}</code></pre>` : '<p class="text-muted small mb-0"><em>No code implementation</em></p>'}
+                        <div class="row">
+                            <div class="col-md-8">
+                                <p class="text-muted mb-2">${algorithm.description || 'No description provided'}</p>
+                                <div class="d-flex gap-3">
+                                    <small><strong>Threshold:</strong> ${algorithm.threshold}%</small>
+                                    <small><strong>Priority:</strong> ${algorithm.priority}</small>
+                                    ${algorithm.url ? `<small><a href="${algorithm.url}" target="_blank"><i class="fas fa-external-link-alt"></i> Documentation</a></small>` : ''}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                ${algorithm.code ? `<pre class="bg-light p-2 small rounded" style="max-height: 100px; overflow-y: auto;"><code>${algorithm.code.substring(0, 200)}${algorithm.code.length > 200 ? '...' : ''}</code></pre>` : '<em class="text-muted">No code provided</em>'}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -434,6 +444,16 @@ function renderScienceCaseContent(scienceCase) {
     });
     
     content += `
+        <div class="mb-3">
+            <div class="card add-algorithm-card border-2 border-dashed d-flex align-items-center justify-content-center" 
+                 onclick="showAddAlgorithmModal('${scienceCase}')" 
+                 style="cursor: pointer; min-height: 120px;">
+                <div class="text-center">
+                    <i class="fas fa-plus fa-2x text-primary mb-2"></i>
+                    <h6 class="text-primary mb-0">Add New Algorithm</h6>
+                    <small class="text-muted">Click to create a new algorithm for ${scienceCase.replace('-', ' ')}</small>
+                </div>
+            </div>
         </div>
     `;
     
