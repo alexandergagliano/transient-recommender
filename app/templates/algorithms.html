@@ -219,10 +219,11 @@
                                 <label for="newAlgCode" class="form-label">Python Function *</label>
                                 <div class="alert alert-info">
                                     <strong>Requirements:</strong> Write a standalone function named exactly the same as your algorithm name.
-                                    The function must take <code>ztfid</code> as parameter and return a dictionary with <code>"label"</code> and <code>"score"</code> keys.
+                                    The function must take <code>ztfid</code> and <code>confidence_threshold</code> as parameters and return a dictionary with <code>"label"</code> and <code>"score"</code> keys.
                                 </div>
-                                <textarea id="newAlgCode" class="form-control" rows="15" required placeholder="def your_algorithm_name(ztfid):
+                                <textarea id="newAlgCode" class="form-control" rows="15" required placeholder="def your_algorithm_name(ztfid, confidence_threshold):
     # Your algorithm implementation here
+    # Use confidence_threshold instead of hardcoding values
     # Must return: {'label': 'Classification', 'score': confidence_percentage}
     return {'label': 'Unknown', 'score': 0.0}"></textarea>
                                 <div id="codeValidation" class="mt-2"></div>
@@ -314,9 +315,12 @@
                 errors.push(`Function must be named '${expectedFuncName}' to match algorithm name '${algorithmName}'`);
             }
             
-            // Check if function takes ztfid parameter
+            // Check if function takes both required parameters
             if (!code.includes('ztfid')) {
-                errors.push('Function must accept "ztfid" as a parameter');
+                errors.push('Function must accept "ztfid" as first parameter');
+            }
+            if (!code.includes('confidence_threshold')) {
+                errors.push('Function must accept "confidence_threshold" as second parameter');
             }
             
             // Check if function returns dictionary with label and score

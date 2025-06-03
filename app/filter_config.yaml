@@ -17,7 +17,7 @@ filters:
       module: "app.anomaly_service"
       function: "process_new_objects_for_anomalies"
       python_code: |
-        def reLAISS(ztfid):
+        def reLAISS(ztfid, confidence_threshold):
             """
             reLAISS anomaly detection filter
             Returns anomaly score and filter result
@@ -25,8 +25,10 @@ filters:
             from app.anomaly_service import process_new_objects_for_anomalies
             result = process_new_objects_for_anomalies([ztfid])
             if result and ztfid in result:
+                # Use the confidence_threshold from admin panel instead of hardcoding
+                threshold_decimal = confidence_threshold / 100.0  # Convert percentage to decimal
                 return {
-                    "label": "Anomalous" if result[ztfid]["anomaly_score"] > 0.6 else "Normal",
+                    "label": "Anomalous" if result[ztfid]["anomaly_score"] > threshold_decimal else "Normal",
                     "score": result[ztfid]["anomaly_score"] * 100
                 }
             return {"label": "Unknown", "score": 0.0}

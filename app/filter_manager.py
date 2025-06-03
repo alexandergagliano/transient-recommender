@@ -112,8 +112,8 @@ class CodeValidator:
             errors.append(f'Function name must be "{function_name}", got "{function_defs[0].name}"')
         else:
             func_def = function_defs[0]
-            if len(func_def.args.args) != 1 or func_def.args.args[0].arg != 'ztfid':
-                errors.append('Function must accept exactly one parameter named "ztfid"')
+            if len(func_def.args.args) != 2 or func_def.args.args[0].arg != 'ztfid' or func_def.args.args[1].arg != 'confidence_threshold':
+                errors.append('Function must accept exactly two parameters: "ztfid" and "confidence_threshold"')
         
         # Check for return statements
         has_return = any(isinstance(node, ast.Return) for node in ast.walk(tree))
@@ -129,7 +129,7 @@ class SecureExecutor:
         self.timeout_seconds = timeout_seconds
         self.memory_limit_mb = memory_limit_mb
     
-    def execute_function(self, compiled_function: FunctionType, ztfid: str) -> Dict[str, Any]:
+    def execute_function(self, compiled_function: FunctionType, ztfid: str, confidence_threshold: float) -> Dict[str, Any]:
         """
         Execute a compiled function with security restrictions.
         
@@ -146,7 +146,7 @@ class SecureExecutor:
             
             def target():
                 try:
-                    result_container[0] = compiled_function(ztfid)
+                    result_container[0] = compiled_function(ztfid, confidence_threshold)
                 except Exception as e:
                     exception_container[0] = e
             
@@ -390,7 +390,7 @@ class FilterManager:
             for ztfid in ztfids:
                 try:
                     # Execute with security restrictions
-                    execution_result = self.executor.execute_function(compiled_function, ztfid)
+                    execution_result = self.executor.execute_function(compiled_function, ztfid, confidence_threshold)
                     result = execution_result['result']
                     
                     # Check if result meets confidence threshold
