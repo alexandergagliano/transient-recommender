@@ -529,6 +529,20 @@ async def recommendations_page(
         context["start_ztfid"] = ztfid
     return templates.TemplateResponse("recommendations.html", context)
 
+@app.get("/algorithms", response_class=HTMLResponse)
+async def algorithms_page(
+    request: Request,
+    current_user: models.User = Depends(get_current_user)
+):
+    """Algorithm management page (admin only)."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator privileges required to access algorithm management",
+        )
+    
+    return templates.TemplateResponse("algorithms.html", {"request": request, "current_user": current_user})
+
 @api_app.get("/recommendations")
 async def get_recommendations(
     science_case: str = "snia-like",
@@ -2336,6 +2350,75 @@ async def get_classifier_badges(
             'total_badges': 0,
             'error': 'Error loading classifier information'
         }
+
+@api_app.get("/admin/algorithm-config")
+async def get_algorithm_config(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get the current algorithm configuration (admin only)."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator privileges required",
+        )
+    
+    try:
+        config = classifier_manager.load_config()
+        if not config:
+            raise HTTPException(status_code=500, detail="Failed to load configuration")
+        
+        return classifier_manager.config
+        
+    except Exception as e:
+        logger.error(f"Error getting algorithm config: {e}")
+        raise HTTPException(status_code=500, detail=f"Error loading configuration: {str(e)}")
+
+@api_app.post("/admin/algorithm-config")
+async def save_algorithm_config(
+    request: Request,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Save the algorithm configuration to YAML file (admin only)."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator privileges required",
+        )
+    
+    try:
+        data = await request.json()
+        
+        # Validate the configuration structure
+        required_keys = ['classifiers', 'settings']
+        for key in required_keys:
+            if key not in data:
+                raise HTTPException(status_code=400, detail=f"Missing required key: {key}")
+        
+        # Write the configuration to the YAML file
+        import yaml
+        config_path = classifier_manager.config_path
+        
+        with open(config_path, 'w') as f:
+            yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        
+        # Reload the configuration in memory
+        classifier_manager.load_config()
+        
+        logger.info(f"Algorithm configuration updated by {current_user.username}")
+        
+        return {
+            "status": "success",
+            "message": "Algorithm configuration saved successfully",
+            "saved_by": current_user.username
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving algorithm config: {e}")
+        raise HTTPException(status_code=500, detail=f"Error saving configuration: {str(e)}")
 
 @api_app.get("/demo/content")
 async def get_demo_content(

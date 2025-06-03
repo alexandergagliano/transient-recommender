@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Algorithm Management - Transient Recommender</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-star"></i> Transient Recommender
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/recommendations">Recommendations</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/targets">Targets</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/history">History</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/algorithms">
+                            <i class="fas fa-cogs"></i> Algorithms
+                        </a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/profile">Profile</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/logout">Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2><i class="fas fa-cogs"></i> Algorithm Management</h2>
+                    <div>
+                        <button id="saveConfig" class="btn btn-primary me-2" disabled>
+                            <i class="fas fa-save"></i> Save Configuration
+                        </button>
+                        <button id="resetConfig" class="btn btn-outline-secondary">
+                            <i class="fas fa-undo"></i> Reset Changes
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loading indicator -->
+                <div id="loadingIndicator" class="text-center py-5">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading algorithms...</span>
+                    </div>
+                    <p class="mt-2">Loading algorithm configuration...</p>
+                </div>
+
+                <!-- Science Case Tabs -->
+                <div id="algorithmTabs" style="display: none;">
+                    <ul class="nav nav-tabs" id="scienceCaseTabs" role="tablist">
+                        <!-- Tabs will be populated dynamically -->
+                    </ul>
+                    
+                    <div class="tab-content mt-3" id="scienceCaseTabsContent">
+                        <!-- Tab content will be populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Global Settings -->
+                <div id="globalSettings" class="card mt-4" style="display: none;">
+                    <div class="card-header">
+                        <h5><i class="fas fa-globe"></i> Global Algorithm Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label for="runAfterExtraction" class="form-label">Run After Feature Extraction</label>
+                                <select id="runAfterExtraction" class="form-select">
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="maxConcurrent" class="form-label">Max Concurrent Algorithms</label>
+                                <input type="number" id="maxConcurrent" class="form-control" min="1" max="10">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="logLevel" class="form-label">Log Level</label>
+                                <select id="logLevel" class="form-select">
+                                    <option value="DEBUG">DEBUG</option>
+                                    <option value="INFO">INFO</option>
+                                    <option value="WARNING">WARNING</option>
+                                    <option value="ERROR">ERROR</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="cacheResults">
+                                    <label class="form-check-label" for="cacheResults">
+                                        Cache Algorithm Results
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="cacheDuration" class="form-label">Cache Duration (hours)</label>
+                                <input type="number" id="cacheDuration" class="form-control" min="1" max="168">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <!-- Toasts will be added here -->
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let originalConfig = null;
+        let currentConfig = null;
+        let hasUnsavedChanges = false;
+
+        // Load configuration on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAlgorithmConfig();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            document.getElementById('saveConfig').addEventListener('click', saveConfiguration);
+            document.getElementById('resetConfig').addEventListener('click', resetConfiguration);
+            
+            // Track changes to enable/disable save button
+            document.addEventListener('change', function(e) {
+                if (e.target.matches('.algorithm-setting')) {
+                    markConfigurationChanged();
+                }
+            });
+        }
+
+        async function loadAlgorithmConfig() {
+            try {
+                const response = await fetch('/api/admin/algorithm-config');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const config = await response.json();
+                originalConfig = JSON.parse(JSON.stringify(config)); // Deep copy
+                currentConfig = config;
+                
+                renderConfiguration(config);
+                document.getElementById('loadingIndicator').style.display = 'none';
+                document.getElementById('algorithmTabs').style.display = 'block';
+                document.getElementById('globalSettings').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error loading algorithm configuration:', error);
+                showToast('Error loading algorithm configuration', 'error');
+                document.getElementById('loadingIndicator').innerHTML = 
+                    '<div class="alert alert-danger">Failed to load algorithm configuration. Please refresh the page.</div>';
+            }
+        }
+
+        function renderConfiguration(config) {
+            renderScienceCaseTabs(config.classifiers);
+            renderGlobalSettings(config.settings);
+        }
+
+        function renderScienceCaseTabs(classifiers) {
+            const tabsContainer = document.getElementById('scienceCaseTabs');
+            const contentContainer = document.getElementById('scienceCaseTabsContent');
+            
+            tabsContainer.innerHTML = '';
+            contentContainer.innerHTML = '';
+            
+            const scienceCases = Object.keys(classifiers);
+            
+            scienceCases.forEach((scienceCase, index) => {
+                const isActive = index === 0;
+                const tabId = `tab-${scienceCase}`;
+                const contentId = `content-${scienceCase}`;
+                
+                // Create tab
+                const tab = document.createElement('li');
+                tab.className = 'nav-item';
+                tab.innerHTML = `
+                    <button class="nav-link ${isActive ? 'active' : ''}" 
+                            id="${tabId}" 
+                            data-bs-toggle="tab" 
+                            data-bs-target="#${contentId}" 
+                            type="button" 
+                            role="tab">
+                        ${formatScienceCaseName(scienceCase)}
+                    </button>
+                `;
+                tabsContainer.appendChild(tab);
+                
+                // Create tab content
+                const content = document.createElement('div');
+                content.className = `tab-pane fade ${isActive ? 'show active' : ''}`;
+                content.id = contentId;
+                content.role = 'tabpanel';
+                content.innerHTML = renderScienceCaseContent(scienceCase, classifiers[scienceCase]);
+                contentContainer.appendChild(content);
+            });
+        }
+
+        function renderScienceCaseContent(scienceCase, algorithms) {
+            let html = `
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4>${formatScienceCaseName(scienceCase)} Algorithms</h4>
+                    <span class="badge bg-secondary">${algorithms.length} algorithm${algorithms.length !== 1 ? 's' : ''}</span>
+                </div>
+            `;
+            
+            if (algorithms.length === 0) {
+                html += `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        No algorithms configured for this science case. Future algorithms can be added here.
+                    </div>
+                `;
+            } else {
+                algorithms.forEach((algorithm, index) => {
+                    html += renderAlgorithmCard(scienceCase, algorithm, index);
+                });
+            }
+            
+            return html;
+        }
+
+        function renderAlgorithmCard(scienceCase, algorithm, index) {
+            const isEnabled = algorithm.enabled || false;
+            const cardClass = isEnabled ? 'border-success' : 'border-warning';
+            const statusClass = isEnabled ? 'bg-success' : 'bg-warning';
+            const statusText = isEnabled ? 'Enabled' : 'Disabled';
+            
+            return `
+                <div class="card mb-3 ${cardClass}">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-0">
+                                <a href="${algorithm.url || '#'}" target="_blank" class="text-decoration-none">
+                                    ${algorithm.name || 'Unnamed Algorithm'}
+                                </a>
+                            </h6>
+                            <small class="text-muted">${algorithm.description || 'No description available'}</small>
+                        </div>
+                        <span class="badge ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input algorithm-setting" 
+                                           type="checkbox" 
+                                           id="enabled-${scienceCase}-${index}"
+                                           data-science-case="${scienceCase}"
+                                           data-algorithm-index="${index}"
+                                           data-field="enabled"
+                                           ${isEnabled ? 'checked' : ''}>
+                                    <label class="form-check-label" for="enabled-${scienceCase}-${index}">
+                                        Enable Algorithm
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="threshold-${scienceCase}-${index}" class="form-label">Confidence Threshold (%)</label>
+                                <input type="number" 
+                                       class="form-control algorithm-setting" 
+                                       id="threshold-${scienceCase}-${index}"
+                                       data-science-case="${scienceCase}"
+                                       data-algorithm-index="${index}"
+                                       data-field="confidence_threshold"
+                                       value="${algorithm.confidence_threshold || 50}" 
+                                       min="0" 
+                                       max="100" 
+                                       step="0.1">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="module-${scienceCase}-${index}" class="form-label">Module</label>
+                                <input type="text" 
+                                       class="form-control algorithm-setting" 
+                                       id="module-${scienceCase}-${index}"
+                                       data-science-case="${scienceCase}"
+                                       data-algorithm-index="${index}"
+                                       data-field="module"
+                                       value="${algorithm.module || ''}" 
+                                       placeholder="app.module_name">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="function-${scienceCase}-${index}" class="form-label">Function</label>
+                                <input type="text" 
+                                       class="form-control algorithm-setting" 
+                                       id="function-${scienceCase}-${index}"
+                                       data-science-case="${scienceCase}"
+                                       data-algorithm-index="${index}"
+                                       data-field="function"
+                                       value="${algorithm.function || ''}" 
+                                       placeholder="function_name">
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <label for="url-${scienceCase}-${index}" class="form-label">Documentation URL</label>
+                                <input type="url" 
+                                       class="form-control algorithm-setting" 
+                                       id="url-${scienceCase}-${index}"
+                                       data-science-case="${scienceCase}"
+                                       data-algorithm-index="${index}"
+                                       data-field="url"
+                                       value="${algorithm.url || ''}" 
+                                       placeholder="https://github.com/user/repo">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="description-${scienceCase}-${index}" class="form-label">Description</label>
+                                <input type="text" 
+                                       class="form-control algorithm-setting" 
+                                       id="description-${scienceCase}-${index}"
+                                       data-science-case="${scienceCase}"
+                                       data-algorithm-index="${index}"
+                                       data-field="description"
+                                       value="${algorithm.description || ''}" 
+                                       placeholder="Brief description of the algorithm">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderGlobalSettings(settings) {
+            document.getElementById('runAfterExtraction').value = settings.run_after_feature_extraction ? 'true' : 'false';
+            document.getElementById('maxConcurrent').value = settings.max_concurrent_classifiers || 3;
+            document.getElementById('logLevel').value = settings.log_level || 'INFO';
+            document.getElementById('cacheResults').checked = settings.cache_results || false;
+            document.getElementById('cacheDuration').value = settings.cache_duration_hours || 24;
+            
+            // Add change listeners for global settings
+            ['runAfterExtraction', 'maxConcurrent', 'logLevel', 'cacheResults', 'cacheDuration'].forEach(id => {
+                document.getElementById(id).addEventListener('change', markConfigurationChanged);
+            });
+        }
+
+        function markConfigurationChanged() {
+            hasUnsavedChanges = true;
+            document.getElementById('saveConfig').disabled = false;
+            
+            // Update current config with changes
+            updateCurrentConfigFromForm();
+        }
+
+        function updateCurrentConfigFromForm() {
+            // Update algorithm settings
+            document.querySelectorAll('.algorithm-setting').forEach(input => {
+                const scienceCase = input.dataset.scienceCase;
+                const algorithmIndex = parseInt(input.dataset.algorithmIndex);
+                const field = input.dataset.field;
+                
+                if (currentConfig.classifiers[scienceCase] && currentConfig.classifiers[scienceCase][algorithmIndex]) {
+                    let value = input.value;
+                    
+                    // Convert types as needed
+                    if (field === 'enabled') {
+                        value = input.checked;
+                    } else if (field === 'confidence_threshold') {
+                        value = parseFloat(value);
+                    }
+                    
+                    currentConfig.classifiers[scienceCase][algorithmIndex][field] = value;
+                }
+            });
+            
+            // Update global settings
+            currentConfig.settings.run_after_feature_extraction = document.getElementById('runAfterExtraction').value === 'true';
+            currentConfig.settings.max_concurrent_classifiers = parseInt(document.getElementById('maxConcurrent').value);
+            currentConfig.settings.log_level = document.getElementById('logLevel').value;
+            currentConfig.settings.cache_results = document.getElementById('cacheResults').checked;
+            currentConfig.settings.cache_duration_hours = parseInt(document.getElementById('cacheDuration').value);
+        }
+
+        async function saveConfiguration() {
+            try {
+                document.getElementById('saveConfig').disabled = true;
+                document.getElementById('saveConfig').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+                
+                updateCurrentConfigFromForm();
+                
+                const response = await fetch('/api/admin/algorithm-config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(currentConfig)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                
+                // Update original config to new saved state
+                originalConfig = JSON.parse(JSON.stringify(currentConfig));
+                hasUnsavedChanges = false;
+                
+                showToast('Algorithm configuration saved successfully!', 'success');
+                
+            } catch (error) {
+                console.error('Error saving configuration:', error);
+                showToast('Error saving configuration: ' + error.message, 'error');
+            } finally {
+                document.getElementById('saveConfig').disabled = hasUnsavedChanges === false;
+                document.getElementById('saveConfig').innerHTML = '<i class="fas fa-save"></i> Save Configuration';
+            }
+        }
+
+        function resetConfiguration() {
+            if (hasUnsavedChanges && !confirm('Are you sure you want to discard all unsaved changes?')) {
+                return;
+            }
+            
+            currentConfig = JSON.parse(JSON.stringify(originalConfig));
+            renderConfiguration(currentConfig);
+            hasUnsavedChanges = false;
+            document.getElementById('saveConfig').disabled = true;
+            
+            showToast('Configuration reset to last saved state', 'info');
+        }
+
+        function formatScienceCaseName(scienceCase) {
+            return scienceCase
+                .split('-')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ');
+        }
+
+        function showToast(message, type = 'info') {
+            const toastContainer = document.querySelector('.toast-container');
+            const toastId = 'toast-' + Date.now();
+            
+            const toastHtml = `
+                <div id="${toastId}" class="toast align-items-center text-bg-${type === 'error' ? 'danger' : type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+            
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement);
+            toast.show();
+            
+            // Remove toast element after it's hidden
+            toastElement.addEventListener('hidden.bs.toast', () => {
+                toastElement.remove();
+            });
+        }
+
+        // Warn about unsaved changes when leaving page
+        window.addEventListener('beforeunload', function(e) {
+            if (hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+                return e.returnValue;
+            }
+        });
+    </script>
+</body>
+</html> 

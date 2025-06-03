@@ -55,11 +55,25 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/preferences">Preferences</a>
                     </li>
+                    {% if current_user.is_admin %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/algorithms">
+                            <i class="fas fa-cogs"></i> Algorithms
+                        </a>
+                    </li>
+                    {% endif %}
                     {% endif %}
                 </ul>
                 
                 <ul class="navbar-nav">
                     {% if current_user %}
+                    <li class="nav-item">
+                        <button id="anomaly-notifications-button" class="btn btn-outline-light me-2" title="Anomaly Notifications" style="display: none;">
+                            <i class="bi bi-bell"></i>
+                            <span class="d-none d-md-inline">Anomalies</span>
+                            <span id="anomaly-count-badge" class="badge bg-danger text-light ms-1">0</span>
+                        </button>
+                    </li>
                     <li class="nav-item">
                         <button id="targets-button" class="btn btn-outline-light me-2" title="View My Targets">
                             <i class="bi bi-bullseye"></i>
@@ -82,6 +96,29 @@
             </div>
         </div>
     </nav>
+
+    <!-- Anomaly Notifications Modal -->
+    <div class="modal fade" id="anomalyNotificationsModal" tabindex="-1" aria-labelledby="anomalyNotificationsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title" id="anomalyNotificationsModalLabel">
+                        <i class="bi bi-exclamation-triangle"></i> Anomalous Objects Detected
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="anomaly-notifications-content">
+                        <!-- Content will be loaded here -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="acknowledge-all-anomalies">Mark All as Seen</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Main Content -->
     <main class="container-fluid mt-3">
