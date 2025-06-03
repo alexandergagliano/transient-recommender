@@ -32,13 +32,13 @@ echo
 echo "=== Step 2: Running Diagnostic ==="
 if [ "$CONTAINERS_RUNNING" = true ]; then
     echo "Running diagnostic inside Docker container..."
-    docker-compose exec app python debug_algorithm_config.py
+    docker-compose exec web python debug_algorithm_config.py
     DIAGNOSTIC_EXIT_CODE=$?
 else
     echo "Starting containers temporarily for diagnostic..."
     docker-compose up -d
     sleep 10
-    docker-compose exec app python debug_algorithm_config.py
+    docker-compose exec web python debug_algorithm_config.py
     DIAGNOSTIC_EXIT_CODE=$?
     docker-compose down
 fi
@@ -58,7 +58,7 @@ else
     docker-compose down
     
     echo "Rebuilding with fresh dependencies..."
-    docker-compose build --no-cache app
+    docker-compose build --no-cache web
     
     echo "Starting containers..."
     docker-compose up -d
@@ -69,7 +69,7 @@ else
     
     # Test again
     echo "Running post-fix diagnostic..."
-    docker-compose exec app python debug_algorithm_config.py
+    docker-compose exec web python debug_algorithm_config.py
     POST_FIX_EXIT_CODE=$?
     
     if [ $POST_FIX_EXIT_CODE -eq 0 ]; then
@@ -89,7 +89,7 @@ echo "  - Main app: http://your-server-ip:8080"
 echo "  - Algorithms page: http://your-server-ip:8080/algorithms"
 echo
 echo "If you're still seeing issues:"
-echo "  1. Check logs: docker-compose logs app"
+echo "  1. Check logs: docker-compose logs web"
 echo "  2. Restart: docker-compose restart"
 echo "  3. Full rebuild: docker-compose down && docker-compose up --build -d"
 echo
