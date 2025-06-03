@@ -2441,13 +2441,8 @@ function onExtractionComplete(data) {
     if (triggerButton) {
         triggerButton.disabled = false;
         triggerButton.innerHTML = '<i class="fas fa-cogs"></i> Extract Features';
-        // Show the button if user is admin or it's been a while since last extraction
-        if (window.currentUser?.is_admin) {
-            triggerButton.style.display = 'block';
-        } else {
-            // For non-admins, hide the button and let loadExtractionStatus handle visibility
-            triggerButton.style.display = 'none';
-        }
+        // Always keep the button visible and enabled after completion
+        triggerButton.style.display = 'block';
     }
     
     // Show success notification

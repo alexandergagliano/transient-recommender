@@ -551,26 +551,76 @@ function showAddAlgorithmModal(scienceCase) {
         document.getElementById('newAlgUrl').value = 'https://github.com/alexandergagliano/reLAISS';
         document.getElementById('newAlgCode').value = `def reLAISS_filter(ztfid, confidence_threshold):
     """
-    reLAISS anomaly detection filter
+    reLAISS anomaly detection filter using actual implementation
     Returns anomaly score based on light curve morphology
     """
+    import sys
     import numpy as np
-    from scipy import stats
+    sys.path.append('./laiss_final/re-laiss/src')
     
-    # This is a placeholder implementation
-    # Replace with actual reLAISS algorithm
-    
-    # Simulate anomaly score (replace with real implementation)
-    # Higher scores indicate more anomalous behavior
-    anomaly_score = np.random.uniform(0, 100)
-    
-    if anomaly_score >= confidence_threshold:
-        return {
-            'label': 'Anomalous Transient',
-            'score': anomaly_score
-        }
-    else:
-        return None  # Not anomalous enough`;
+    try:
+        import relaiss
+        from relaiss.anomaly import anomaly_detection
+        
+        # Initialize reLAISS client
+        client = relaiss.ReLAISS()
+        
+        # Load reference with 25 light curve features
+        client.load_reference(
+            lc_features=[
+                'mean_g-r', 'g_peak_mag', 'r_peak_mag', 'g_amplitude', 'r_amplitude', 
+                'g-r_at_g_peak', 'mean_color_rate', 'g_peak_time', 'r_peak_time', 
+                'g_rise_time', 'r_rise_time', 'g_decline_time', 'r_decline_time', 
+                'g_duration_above_half_flux', 'r_duration_above_half_flux', 
+                'g_beyond_2sigma', 'r_beyond_2sigma', 'g_mean_rolling_variance', 
+                'r_mean_rolling_variance', 'g_n_peaks', 'r_n_peaks', 
+                'g_rise_local_curvature', 'g_decline_local_curvature', 
+                'r_rise_local_curvature', 'r_decline_local_curvature'
+            ],
+            host_features=[],
+            path_to_sfd_folder='./data/sfddata-master',
+            force_recreation_of_index=True,
+            building_for_AD=True, 
+            num_trees=1000, 
+            use_pca=False, 
+            weight_lc=1.0 
+        )
+        
+        # Run anomaly detection
+        mjd_anom, anom_scores, norm_scores = anomaly_detection(
+            client=client,
+            transient_ztf_id=ztfid,
+            lc_features=client.lc_features,
+            host_features=[],
+            path_to_timeseries_folder="./laiss_final/timeseries", 
+            path_to_sfd_folder='./data/sfddata-master',         
+            path_to_dataset_bank=client.bank_csv,
+            path_to_models_directory="./laiss_final/models",       
+            save_figures=False,  # No plotting in production
+            anom_thresh=30,  
+            force_retrain=False,  # Don't retrain in production
+            return_scores=True,  # Return the scores
+            preprocessed_df=None
+        )
+        
+        # Get maximum anomaly score across all epochs
+        max_anomaly_score = np.max(anom_scores) if len(anom_scores) > 0 else 0
+        
+        # Convert to 0-100 scale and check against threshold
+        anomaly_percentage = max_anomaly_score
+        
+        if anomaly_percentage >= confidence_threshold:
+            return {
+                'label': 'Anomalous Transient',
+                'score': float(anomaly_percentage)
+            }
+        else:
+            return None  # Not anomalous enough
+            
+    except Exception as e:
+        # Fallback in case of errors
+        print(f"reLAISS error for {ztfid}: {e}")
+        return None`;
     }
     
     new bootstrap.Modal(document.getElementById('addAlgorithmModal')).show();
