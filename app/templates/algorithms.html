@@ -6,7 +6,51 @@
     <title>Algorithm Management - Transient Recommender</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/material.min.css" rel="stylesheet">
     <link href="/static/css/style.css" rel="stylesheet">
+    <style>
+        .nav-tabs .nav-link {
+            color: #212529 !important;
+            font-weight: 500;
+        }
+        .nav-tabs .nav-link:hover {
+            color: #0d6efd !important;
+        }
+        .nav-tabs .nav-link.active {
+            color: #0d6efd !important;
+            font-weight: 600;
+        }
+        .algorithm-card {
+            border-left: 4px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+        .algorithm-card.enabled {
+            border-left-color: #198754;
+        }
+        .algorithm-card.disabled {
+            border-left-color: #dc3545;
+        }
+        .code-editor {
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+        }
+        .validation-error {
+            border-color: #dc3545 !important;
+        }
+        .validation-success {
+            border-color: #198754 !important;
+        }
+        .add-algorithm-card {
+            border: 2px dashed #dee2e6;
+            background-color: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+        .add-algorithm-card:hover {
+            border-color: #0d6efd;
+            background-color: #e7f1ff;
+        }
+    </style>
 </head>
 <body>
     <!-- Navigation -->
@@ -129,26 +173,98 @@
         </div>
     </div>
 
+    <!-- Add Algorithm Modal -->
+    <div class="modal fade" id="addAlgorithmModal" tabindex="-1" aria-labelledby="addAlgorithmModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addAlgorithmModalLabel">Add New Algorithm</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="newAlgorithmForm">
+                        <input type="hidden" id="newAlgScienceCase" />
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="newAlgName" class="form-label">Algorithm Name *</label>
+                                <input type="text" class="form-control" id="newAlgName" required placeholder="e.g., SUPERPHOT+">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="newAlgUrl" class="form-label">Documentation URL</label>
+                                <input type="url" class="form-control" id="newAlgUrl" placeholder="https://github.com/user/repo">
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <label for="newAlgThreshold" class="form-label">Confidence Threshold (%)</label>
+                                <input type="number" class="form-control" id="newAlgThreshold" value="70" min="0" max="100" step="0.1">
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mt-4">
+                                    <input class="form-check-input" type="checkbox" id="newAlgEnabled">
+                                    <label class="form-check-label" for="newAlgEnabled">
+                                        Enable Algorithm
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <label for="newAlgDescription" class="form-label">Description</label>
+                                <input type="text" class="form-control" id="newAlgDescription" placeholder="Brief description of the algorithm">
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <label for="newAlgCode" class="form-label">Python Function *</label>
+                                <div class="alert alert-info">
+                                    <strong>Requirements:</strong> Write a standalone function named exactly the same as your algorithm name.
+                                    The function must take <code>ztfid</code> as parameter and return a dictionary with <code>"label"</code> and <code>"score"</code> keys.
+                                </div>
+                                <textarea id="newAlgCode" class="form-control" rows="15" required placeholder="def your_algorithm_name(ztfid):
+    # Your algorithm implementation here
+    # Must return: {'label': 'Classification', 'score': confidence_percentage}
+    return {'label': 'Unknown', 'score': 0.0}"></textarea>
+                                <div id="codeValidation" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveNewAlgorithm">
+                        <i class="fas fa-plus"></i> Add Algorithm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Container -->
     <div class="toast-container position-fixed bottom-0 end-0 p-3">
         <!-- Toasts will be added here -->
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
     <script>
         let originalConfig = null;
         let currentConfig = null;
         let hasUnsavedChanges = false;
+        let codeEditor = null;
 
         // Load configuration on page load
         document.addEventListener('DOMContentLoaded', function() {
             loadAlgorithmConfig();
             setupEventListeners();
+            setupCodeEditor();
         });
 
         function setupEventListeners() {
             document.getElementById('saveConfig').addEventListener('click', saveConfiguration);
             document.getElementById('resetConfig').addEventListener('click', resetConfiguration);
+            document.getElementById('saveNewAlgorithm').addEventListener('click', saveNewAlgorithm);
             
             // Track changes to enable/disable save button
             document.addEventListener('change', function(e) {
@@ -156,6 +272,104 @@
                     markConfigurationChanged();
                 }
             });
+
+            // Code validation
+            document.getElementById('newAlgCode').addEventListener('input', validatePythonCode);
+            document.getElementById('newAlgName').addEventListener('input', validatePythonCode);
+        }
+
+        function setupCodeEditor() {
+            const textarea = document.getElementById('newAlgCode');
+            codeEditor = CodeMirror.fromTextArea(textarea, {
+                mode: 'python',
+                theme: 'material',
+                lineNumbers: true,
+                indentUnit: 4,
+                autoCloseBrackets: true,
+                matchBrackets: true,
+                lineWrapping: true
+            });
+            
+            codeEditor.on('change', validatePythonCode);
+        }
+
+        function validatePythonCode() {
+            const algorithmName = document.getElementById('newAlgName').value.trim();
+            const code = codeEditor ? codeEditor.getValue() : document.getElementById('newAlgCode').value;
+            const validationDiv = document.getElementById('codeValidation');
+            const saveButton = document.getElementById('saveNewAlgorithm');
+            
+            if (!algorithmName || !code.trim()) {
+                validationDiv.innerHTML = '';
+                saveButton.disabled = true;
+                return;
+            }
+
+            const errors = [];
+            
+            // Check if function name matches algorithm name (case-insensitive, allowing underscores)
+            const expectedFuncName = algorithmName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const funcDefRegex = new RegExp(`def\\s+${expectedFuncName}\\s*\\(`, 'i');
+            if (!funcDefRegex.test(code)) {
+                errors.push(`Function must be named '${expectedFuncName}' to match algorithm name '${algorithmName}'`);
+            }
+            
+            // Check if function takes ztfid parameter
+            if (!code.includes('ztfid')) {
+                errors.push('Function must accept "ztfid" as a parameter');
+            }
+            
+            // Check if function returns dictionary with label and score
+            if (!code.includes('return') || (!code.includes('"label"') && !code.includes("'label'"))) {
+                errors.push('Function must return a dictionary with "label" key');
+            }
+            
+            if (!code.includes('"score"') && !code.includes("'score'")) {
+                errors.push('Function must return a dictionary with "score" key');
+            }
+            
+            // Basic Python syntax check (very simple)
+            const lines = code.split('\n');
+            let indentationError = false;
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.trim() && !line.startsWith(' ') && !line.startsWith('\t') && !line.startsWith('def') && !line.startsWith('#')) {
+                    if (i > 0) { // Allow first line to not be indented if it's the function definition
+                        indentationError = true;
+                        break;
+                    }
+                }
+            }
+            if (indentationError) {
+                errors.push('All code must be properly indented within the function');
+            }
+            
+            if (errors.length > 0) {
+                validationDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Validation Errors:</strong>
+                        <ul class="mb-0 mt-2">
+                            ${errors.map(error => `<li>${error}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+                saveButton.disabled = true;
+                if (codeEditor) {
+                    codeEditor.getWrapperElement().classList.add('validation-error');
+                    codeEditor.getWrapperElement().classList.remove('validation-success');
+                }
+            } else {
+                validationDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle"></i> Function validation passed!
+                    </div>
+                `;
+                saveButton.disabled = false;
+                if (codeEditor) {
+                    codeEditor.getWrapperElement().classList.add('validation-success');
+                    codeEditor.getWrapperElement().classList.remove('validation-error');
+                }
+            }
         }
 
         async function loadAlgorithmConfig() {
@@ -183,18 +397,18 @@
         }
 
         function renderConfiguration(config) {
-            renderScienceCaseTabs(config.classifiers);
+            renderScienceCaseTabs(config.filters);
             renderGlobalSettings(config.settings);
         }
 
-        function renderScienceCaseTabs(classifiers) {
+        function renderScienceCaseTabs(filters) {
             const tabsContainer = document.getElementById('scienceCaseTabs');
             const contentContainer = document.getElementById('scienceCaseTabsContent');
             
             tabsContainer.innerHTML = '';
             contentContainer.innerHTML = '';
             
-            const scienceCases = Object.keys(classifiers);
+            const scienceCases = Object.keys(filters);
             
             scienceCases.forEach((scienceCase, index) => {
                 const isActive = index === 0;
@@ -221,7 +435,7 @@
                 content.className = `tab-pane fade ${isActive ? 'show active' : ''}`;
                 content.id = contentId;
                 content.role = 'tabpanel';
-                content.innerHTML = renderScienceCaseContent(scienceCase, classifiers[scienceCase]);
+                content.innerHTML = renderScienceCaseContent(scienceCase, filters[scienceCase]);
                 contentContainer.appendChild(content);
             });
         }
@@ -230,15 +444,23 @@
             let html = `
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h4>${formatScienceCaseName(scienceCase)} Algorithms</h4>
-                    <span class="badge bg-secondary">${algorithms.length} algorithm${algorithms.length !== 1 ? 's' : ''}</span>
+                    <div>
+                        <span class="badge bg-secondary me-2">${algorithms.length} algorithm${algorithms.length !== 1 ? 's' : ''}</span>
+                        <button class="btn btn-outline-primary btn-sm" onclick="openAddAlgorithmModal('${scienceCase}')">
+                            <i class="fas fa-plus"></i> Add Algorithm
+                        </button>
+                    </div>
                 </div>
             `;
             
             if (algorithms.length === 0) {
                 html += `
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i>
-                        No algorithms configured for this science case. Future algorithms can be added here.
+                    <div class="card add-algorithm-card text-center py-5" onclick="openAddAlgorithmModal('${scienceCase}')" style="cursor: pointer;">
+                        <div class="card-body">
+                            <i class="fas fa-plus-circle fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No algorithms configured</h5>
+                            <p class="text-muted">Click here to add your first algorithm for ${formatScienceCaseName(scienceCase)} objects</p>
+                        </div>
                     </div>
                 `;
             } else {
@@ -252,12 +474,12 @@
 
         function renderAlgorithmCard(scienceCase, algorithm, index) {
             const isEnabled = algorithm.enabled || false;
-            const cardClass = isEnabled ? 'border-success' : 'border-warning';
+            const cardClass = isEnabled ? 'enabled' : 'disabled';
             const statusClass = isEnabled ? 'bg-success' : 'bg-warning';
             const statusText = isEnabled ? 'Enabled' : 'Disabled';
             
             return `
-                <div class="card mb-3 ${cardClass}">
+                <div class="card algorithm-card ${cardClass} mb-3">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <div>
                             <h6 class="mb-0">
@@ -267,7 +489,12 @@
                             </h6>
                             <small class="text-muted">${algorithm.description || 'No description available'}</small>
                         </div>
-                        <span class="badge ${statusClass}">${statusText}</span>
+                        <div>
+                            <span class="badge ${statusClass} me-2">${statusText}</span>
+                            <button class="btn btn-outline-danger btn-sm" onclick="removeAlgorithm('${scienceCase}', ${index})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="row">
@@ -299,30 +526,6 @@
                                        step="0.1">
                             </div>
                             <div class="col-md-3">
-                                <label for="module-${scienceCase}-${index}" class="form-label">Module</label>
-                                <input type="text" 
-                                       class="form-control algorithm-setting" 
-                                       id="module-${scienceCase}-${index}"
-                                       data-science-case="${scienceCase}"
-                                       data-algorithm-index="${index}"
-                                       data-field="module"
-                                       value="${algorithm.module || ''}" 
-                                       placeholder="app.module_name">
-                            </div>
-                            <div class="col-md-3">
-                                <label for="function-${scienceCase}-${index}" class="form-label">Function</label>
-                                <input type="text" 
-                                       class="form-control algorithm-setting" 
-                                       id="function-${scienceCase}-${index}"
-                                       data-science-case="${scienceCase}"
-                                       data-algorithm-index="${index}"
-                                       data-field="function"
-                                       value="${algorithm.function || ''}" 
-                                       placeholder="function_name">
-                            </div>
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-md-6">
                                 <label for="url-${scienceCase}-${index}" class="form-label">Documentation URL</label>
                                 <input type="url" 
                                        class="form-control algorithm-setting" 
@@ -333,7 +536,7 @@
                                        value="${algorithm.url || ''}" 
                                        placeholder="https://github.com/user/repo">
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-3">
                                 <label for="description-${scienceCase}-${index}" class="form-label">Description</label>
                                 <input type="text" 
                                        class="form-control algorithm-setting" 
@@ -345,14 +548,95 @@
                                        placeholder="Brief description of the algorithm">
                             </div>
                         </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <label class="form-label">Python Function</label>
+                                <div class="code-editor">
+                                    <pre class="bg-light p-3 rounded" style="max-height: 200px; overflow-y: auto;"><code>${algorithm.python_code || 'No code defined'}</code></pre>
+                                </div>
+                                <button class="btn btn-outline-secondary btn-sm mt-2" onclick="editAlgorithmCode('${scienceCase}', ${index})">
+                                    <i class="fas fa-edit"></i> Edit Code
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
         }
 
+        function openAddAlgorithmModal(scienceCase) {
+            document.getElementById('newAlgScienceCase').value = scienceCase;
+            document.getElementById('addAlgorithmModalLabel').textContent = `Add Algorithm to ${formatScienceCaseName(scienceCase)}`;
+            
+            // Reset form
+            document.getElementById('newAlgorithmForm').reset();
+            document.getElementById('newAlgThreshold').value = 70;
+            if (codeEditor) {
+                codeEditor.setValue('');
+            }
+            document.getElementById('codeValidation').innerHTML = '';
+            document.getElementById('saveNewAlgorithm').disabled = true;
+            
+            new bootstrap.Modal(document.getElementById('addAlgorithmModal')).show();
+        }
+
+        function saveNewAlgorithm() {
+            const scienceCase = document.getElementById('newAlgScienceCase').value;
+            const name = document.getElementById('newAlgName').value.trim();
+            const url = document.getElementById('newAlgUrl').value.trim();
+            const threshold = parseFloat(document.getElementById('newAlgThreshold').value);
+            const enabled = document.getElementById('newAlgEnabled').checked;
+            const description = document.getElementById('newAlgDescription').value.trim();
+            const pythonCode = codeEditor ? codeEditor.getValue() : document.getElementById('newAlgCode').value;
+            
+            if (!name || !pythonCode.trim()) {
+                showToast('Please fill in all required fields', 'error');
+                return;
+            }
+            
+            const newAlgorithm = {
+                name: name,
+                description: description || `${name} filtering algorithm`,
+                url: url || '#',
+                enabled: enabled,
+                confidence_threshold: threshold,
+                module: "app.custom_classifiers",  // Backend will handle this
+                function: name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+                python_code: pythonCode
+            };
+            
+            if (!currentConfig.filters[scienceCase]) {
+                currentConfig.filters[scienceCase] = [];
+            }
+            
+            currentConfig.filters[scienceCase].push(newAlgorithm);
+            
+            renderConfiguration(currentConfig);
+            markConfigurationChanged();
+            
+            bootstrap.Modal.getInstance(document.getElementById('addAlgorithmModal')).hide();
+            showToast(`Algorithm "${name}" added successfully!`, 'success');
+        }
+
+        function removeAlgorithm(scienceCase, index) {
+            const algorithm = currentConfig.filters[scienceCase][index];
+            if (confirm(`Are you sure you want to remove "${algorithm.name}"?`)) {
+                currentConfig.filters[scienceCase].splice(index, 1);
+                renderConfiguration(currentConfig);
+                markConfigurationChanged();
+                showToast(`Algorithm "${algorithm.name}" removed`, 'info');
+            }
+        }
+
+        function editAlgorithmCode(scienceCase, index) {
+            // This would open the same modal but in edit mode
+            // For brevity, implementing as alert for now
+            alert('Code editing feature - would open modal with current code pre-filled');
+        }
+
         function renderGlobalSettings(settings) {
             document.getElementById('runAfterExtraction').value = settings.run_after_feature_extraction ? 'true' : 'false';
-            document.getElementById('maxConcurrent').value = settings.max_concurrent_classifiers || 3;
+            document.getElementById('maxConcurrent').value = settings.max_concurrent_filters || 3;
             document.getElementById('logLevel').value = settings.log_level || 'INFO';
             document.getElementById('cacheResults').checked = settings.cache_results || false;
             document.getElementById('cacheDuration').value = settings.cache_duration_hours || 24;
@@ -378,7 +662,7 @@
                 const algorithmIndex = parseInt(input.dataset.algorithmIndex);
                 const field = input.dataset.field;
                 
-                if (currentConfig.classifiers[scienceCase] && currentConfig.classifiers[scienceCase][algorithmIndex]) {
+                if (currentConfig.filters[scienceCase] && currentConfig.filters[scienceCase][algorithmIndex]) {
                     let value = input.value;
                     
                     // Convert types as needed
@@ -388,13 +672,13 @@
                         value = parseFloat(value);
                     }
                     
-                    currentConfig.classifiers[scienceCase][algorithmIndex][field] = value;
+                    currentConfig.filters[scienceCase][algorithmIndex][field] = value;
                 }
             });
             
             // Update global settings
             currentConfig.settings.run_after_feature_extraction = document.getElementById('runAfterExtraction').value === 'true';
-            currentConfig.settings.max_concurrent_classifiers = parseInt(document.getElementById('maxConcurrent').value);
+            currentConfig.settings.max_concurrent_filters = parseInt(document.getElementById('maxConcurrent').value);
             currentConfig.settings.log_level = document.getElementById('logLevel').value;
             currentConfig.settings.cache_results = document.getElementById('cacheResults').checked;
             currentConfig.settings.cache_duration_hours = parseInt(document.getElementById('cacheDuration').value);

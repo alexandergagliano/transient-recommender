@@ -827,7 +827,7 @@ async function updateTargetList() {
             }
         }
         
-        console.log(`🎯 Updated target list: ${targets.length} targets`);
+        console.log(`Updated target list: ${targets.length} targets`);
         
     } catch (error) {
         console.error('Error updating target list:', error);
@@ -840,7 +840,7 @@ async function updateTargetList() {
  */
 async function removeTarget(ztfid) {
     try {
-        console.log('🎯 Removing target:', ztfid);
+        console.log('Removing target:', ztfid);
         
         const response = await fetch('/api/remove-target', {
             method: 'POST',
@@ -855,16 +855,16 @@ async function removeTarget(ztfid) {
         
         if (response.ok) {
             const result = await response.json();
-            console.log('✅ Target removal successful:', result);
+            console.log('Target removal successful:', result);
             showToast(`Removed ${ztfid} from targets`, 'success');
             await updateTargetList();
         } else {
             const errorText = await response.text();
-            console.error('❌ Remove target failed:', response.status, errorText);
+            console.error('Remove target failed:', response.status, errorText);
             throw new Error(`Server error (${response.status}): ${errorText}`);
         }
     } catch (error) {
-        console.error('❌ Error removing target:', error);
+        console.error('Error removing target:', error);
         showToast(`Failed to remove target: ${error.message}`, 'error', 5000);
     }
 }
@@ -1556,8 +1556,8 @@ async function handleVote(ztfid, voteType) {
             } else {
                 // Use appropriate emoji for each vote type
                 let voteMessage = '';
-                if (voteType === 'like') voteMessage = `👍 Liked ${ztfid}`;
-                else if (voteType === 'dislike') voteMessage = `👎 Disliked ${ztfid}`;
+                if (voteType === 'like') voteMessage = `Liked ${ztfid}`;
+                else if (voteType === 'dislike') voteMessage = `Disliked ${ztfid}`;
                 
                 showToast(voteMessage, 'success');
             }
@@ -1664,13 +1664,13 @@ async function generateFinderCharts() {
                 window.URL.revokeObjectURL(url);
                 document.body.removeChild(a);
                 
-                showToast('✅ Finder charts downloaded successfully!', 'success', 5000);
+                showToast('Finder charts downloaded successfully!', 'success', 5000);
             } else {
                 // It's a JSON response (likely an error)
                 const result = await response.json();
                 
                 if (result.status === 'failed') {
-                    let message = `❌ Finder chart generation failed for all ${result.total_targets} targets`;
+                    let message = `Finder chart generation failed for all ${result.total_targets} targets`;
                     if (result.failed_objects && result.failed_objects.length > 0) {
                         message += `\n\nErrors: ${result.failed_objects.slice(0, 2).join(', ')}`;
                         if (result.failed_objects.length > 2) {
@@ -2207,7 +2207,7 @@ async function triggerFeatureExtraction() {
     const statusDiv = document.getElementById('extractionStatus');
     
     try {
-        console.log('🚀 Starting feature extraction...');
+        console.log('Starting feature extraction...');
         
         // Get user configuration
         const lookbackDaysInput = document.getElementById('lookbackDays');
@@ -2272,7 +2272,7 @@ async function triggerFeatureExtraction() {
         }
         
         const result = await response.json();
-        console.log('✅ Feature extraction started:', result);
+                    console.log('Feature extraction started:', result);
         
         // Show progress monitoring
         if (statusDiv) {
@@ -2286,7 +2286,7 @@ async function triggerFeatureExtraction() {
                          role="progressbar" style="width: 20%"></div>
                 </div>
                 <p class="small text-muted mt-2">
-                    ✅ Started successfully! You can continue using the app while extraction runs in the background.
+                    Started successfully! You can continue using the app while extraction runs in the background.
                 </p>
             `;
         }
@@ -2296,13 +2296,13 @@ async function triggerFeatureExtraction() {
         }
         
         // Show notification that extraction started
-        showToast('🚀 Feature extraction started in background! You can continue using the app.', 'success', 4000);
+                    showToast('Feature extraction started in background! You can continue using the app.', 'success', 4000);
         
         // Start polling for completion
         startExtractionProgressMonitoring();
         
     } catch (error) {
-        console.error('❌ Error starting feature extraction:', error);
+        console.error('Error starting feature extraction:', error);
         
         if (statusDiv) {
             const isPermissionError = error.message.includes('administrator privileges');
@@ -2332,7 +2332,7 @@ async function triggerFeatureExtraction() {
 let extractionProgressInterval = null;
 
 function startExtractionProgressMonitoring() {
-    console.log('📊 Starting extraction progress monitoring...');
+            console.log('Starting extraction progress monitoring...');
     
     // Clear any existing interval
     if (extractionProgressInterval) {
@@ -2345,7 +2345,7 @@ function startExtractionProgressMonitoring() {
             const response = await fetch('/api/extraction-status');
             if (response.ok) {
                 const data = await response.json();
-                console.log('📊 Extraction status:', data.status);
+                console.log('Extraction status:', data.status);
                 
                 if (data.status === 'completed') {
                     onExtractionComplete(data);
@@ -2385,7 +2385,7 @@ function updateExtractionProgress() {
 }
 
 function onExtractionComplete(data) {
-    console.log('🎉 Feature extraction completed!', data);
+    console.log('Feature extraction completed!', data);
     
     // Clear polling
     if (extractionProgressInterval) {
@@ -2426,10 +2426,10 @@ function onExtractionComplete(data) {
                      role="progressbar" style="width: 100%"></div>
             </div>
             <p class="text-muted mt-2">
-                📊 Found ${objectsFound} objects, processed ${objectsProcessed} 
+                Found ${objectsFound} objects, processed ${objectsProcessed} 
                 ${data.processing_time_seconds ? `in ${data.processing_time_seconds.toFixed(1)}s` : ''}
                 <br>
-                💡 ${objectsFound === 0 ? 
+                Tip: ${objectsFound === 0 ? 
                     `Try increasing lookback days or check back later for new detections.` :
                     `Features are now up to date for recent objects.`
                 }
@@ -2442,7 +2442,7 @@ function onExtractionComplete(data) {
     }
     
     // Show success notification
-    showToast('🎉 Feature extraction completed successfully!', 'success', 6000);
+    showToast('Feature extraction completed successfully!', 'success', 6000);
     
     // Optionally show desktop notification if supported
     if ('Notification' in window && Notification.permission === 'granted') {
@@ -2454,7 +2454,7 @@ function onExtractionComplete(data) {
 }
 
 function onExtractionFailed(data) {
-    console.error('❌ Feature extraction failed:', data);
+    console.error('Feature extraction failed:', data);
     
     // Clear polling
     if (extractionProgressInterval) {
@@ -2489,7 +2489,7 @@ function onExtractionFailed(data) {
     }
     
     // Show error notification
-    showToast('❌ Feature extraction failed: ' + (data.error_message || 'Unknown error'), 'error', 8000);
+            showToast('Feature extraction failed: ' + (data.error_message || 'Unknown error'), 'error', 8000);
 }
 
 // Request notification permissions
@@ -2497,7 +2497,7 @@ function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission().then(permission => {
             if (permission === 'granted') {
-                console.log('✅ Notification permission granted');
+                console.log('Notification permission granted');
             }
         });
     }
@@ -2979,11 +2979,11 @@ function handleTouchEnd(e) {
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > minSwipeDistance) {
         if (deltaX > 0) {
             // Swipe right - LIKE
-            showToast('👍 Liked!', 'success', 1500);
+                            showToast('👍 Liked!', 'success', 1500);
             handleVote(currentObject, 'like');
         } else {
             // Swipe left - DISLIKE
-            showToast('👎 Disliked!', 'error', 1500);
+                            showToast('👎 Disliked!', 'error', 1500);
             handleVote(currentObject, 'dislike');
         }
     }
@@ -2991,7 +2991,7 @@ function handleTouchEnd(e) {
     else if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > minSwipeDistance) {
         if (deltaY < 0) {
             // Swipe up - TARGET
-            showToast('🎯 Added to targets!', 'info', 1500);
+                            showToast('🎯 Added to targets!', 'info', 1500);
             handleVote(currentObject, 'target');
         } else {
             // Swipe down - NEXT
@@ -3035,41 +3035,41 @@ function showMobileTutorialIfNeeded() {
  * Setup target button functionality
  */
 function setupTargetModal() {
-    console.log('🎯 Setting up target button...');
+    console.log('Setting up target button...');
     
     const button = document.getElementById('targets-button');
     const modal = document.getElementById('target-modal');
     const closeBtn = document.getElementById('target-modal-close');
     
-    console.log('🎯 Target elements:', {
+            console.log('Target elements:', {
         button: !!button,
         modal: !!modal,
         closeBtn: !!closeBtn
     });
     
     if (!button) {
-        console.log('🎯 No targets button found');
+        console.log('No targets button found');
         return;
     }
     
     // Set up button click handler
     button.addEventListener('click', (e) => {
-        console.log('🎯 Targets button clicked!');
+                    console.log('Targets button clicked!');
         e.preventDefault();
         e.stopPropagation();
         
         if (button.disabled) {
-            console.log('🎯 Button is disabled (no targets)');
+            console.log('Button is disabled (no targets)');
             return;
         }
         
         // Check if we're on recommendations page (has modal)
         if (modal && closeBtn) {
-            console.log('🎯 Opening target modal...');
+                            console.log('Opening target modal...');
             modal.classList.add('show');
             updateTargetList();
         } else {
-            console.log('🎯 Navigating to targets page...');
+                            console.log('Navigating to targets page...');
             window.location.href = '/targets';
         }
     });
@@ -3173,7 +3173,7 @@ async function checkDemoAvailability() {
             document.querySelector('.recommendations-container');
         
         if (!isRecommendationsPage) {
-            console.log('❌ Not on recommendations page, skipping demo check');
+            console.log('Not on recommendations page, skipping demo check');
             console.log(`   Current path: ${window.location.pathname}`);
             console.log(`   Has container: ${!!document.getElementById('current-object-container')}`);
             return;

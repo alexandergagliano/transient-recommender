@@ -1,4 +1,4 @@
-# 🚀 Transient Recommender - Linode VPS Deployment Guide
+# Transient Recommender - Linode VPS Deployment Guide
 ## Deploy to Your Domain with Full Control
 
 This guide provides deployment options for the Transient Recommender on your Linode VPS server.
@@ -12,7 +12,7 @@ Run the deployment script:
 
 Choose your preferred deployment method and follow the interactive prompts!
 
-## 🎯 Linode VPS Deployment Options
+## Linode VPS Deployment Options
 
 ### 1. Docker Deployment (Recommended)
 
@@ -110,7 +110,7 @@ SECRET_KEY=your-secret-key-here
 - Enable gzip compression (included in nginx config)
 - Set up automated backup strategy
 
-## 📊 Database Considerations
+## Database Considerations
 
 Your `app.db` file (299MB) contains:
 - User accounts and votes
@@ -128,7 +128,7 @@ cp /path/to/app.db /backup/app_backup_$DATE.db
 find /backup -name "app_backup_*.db" -mtime +7 -delete
 ```
 
-## 🚀 Performance Optimization
+## Performance Optimization
 
 **Current Setup Handles:**
 - 25,515 transient objects in feature bank
@@ -202,7 +202,7 @@ sudo systemctl restart nginx
 docker-compose restart
 ```
 
-## 📈 Monitoring & Maintenance
+## Monitoring & Maintenance
 
 ### Recommended Monitoring:
 - **System monitoring:** htop, netdata, or Prometheus

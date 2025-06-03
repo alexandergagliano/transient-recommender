@@ -19,7 +19,7 @@ from scipy.signal import find_peaks
 import json
 
 from . import models
-from .classifier_manager import classifier_manager
+from .filter_manager import filter_manager
 
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -134,9 +134,9 @@ def get_daily_objects(lookback_days: float = 20.0, lookback_t_first: float = 500
                     logger.info(f"Broader 30-day search found {len(broader_results)} objects")
                     
                     if len(broader_results) > 0:
-                        logger.info("✅ Antares is working, just no recent detections in your timeframe")
+                        logger.info("Antares is working, just no recent detections in your timeframe")
                     else:
-                        logger.warning("⚠️ Even 30-day search found nothing - possible Antares issue")
+                        logger.warning("Even 30-day search found nothing - possible Antares issue")
                         
                 except Exception as e:
                     logger.warning(f"Broader search failed: {e}")
@@ -253,7 +253,7 @@ def get_daily_objects(lookback_days: float = 20.0, lookback_t_first: float = 500
                 })
                 
                 if i < 5:
-                    logger.debug(f"✅ Successfully processed {ztfid} at RA={ra:.4f}, Dec={dec:.4f}")
+                                            logger.debug(f"Successfully processed {ztfid} at RA={ra:.4f}, Dec={dec:.4f}")
                 
             except Exception as e:
                 if i < 10:  # Only log errors for first 10 failures
@@ -689,25 +689,25 @@ def extract_features_for_recent_objects(
             
             for science_case in science_cases:
                 try:
-                    classified_objects = classifier_manager.run_classifiers_for_science_case(
+                    filtered_objects = filter_manager.run_filters_for_science_case(
                         db, science_case, extraction_run
                     )
-                    if classified_objects:
-                        logger.info(f"Classified {len(classified_objects)} objects for {science_case}: {classified_objects}")
-                        total_classified += len(classified_objects)
+                    if filtered_objects:
+                        logger.info(f"Filtered {len(filtered_objects)} objects for {science_case}: {filtered_objects}")
+                        total_classified += len(filtered_objects)
                     else:
-                        logger.info(f"No objects classified for {science_case}")
+                        logger.info(f"No objects filtered for {science_case}")
                 except Exception as e:
-                    logger.error(f"Error running classifiers for {science_case}: {e}")
+                    logger.error(f"Error running filters for {science_case}: {e}")
             
-            logger.info(f"Classifier processing completed: {total_classified} total objects classified across all science cases")
+            logger.info(f"Filter processing completed: {total_classified} total objects filtered across all science cases")
             
             # Initialize placeholder pending votes to ensure system works out of the box
-            classifier_manager.create_placeholder_pending_votes(db)
+            filter_manager.create_placeholder_pending_votes(db)
             
         except Exception as e:
-            logger.error(f"Error running automated classifiers: {e}")
-            # Don't fail the entire extraction run if classifier processing fails
+            logger.error(f"Error running automated filters: {e}")
+            # Don't fail the entire extraction run if filter processing fails
         
         return extraction_run
         

@@ -1,0 +1,45 @@
+---
+# Filter Configuration for Transient Recommender
+# This file defines which automated filters to run for each science case
+# 
+# NOTE: These are filters that determine which objects belong in each science case,
+# NOT classifiers in the machine learning sense. For example:
+# - reLAISS is an anomaly filter (not classifier)
+# - These filters identify objects that should be prioritized for each science case
+
+filters:
+  anomalous:
+          - name: "reLAISS"
+        description: "Anomaly filter using light curve morphology"
+        url: "https://github.com/evan-reynolds/re-laiss"
+        enabled: true
+        confidence_threshold: 60.0
+        module: "app.anomaly_service"
+        function: "process_new_objects_for_anomalies"
+      python_code: |
+        def reLAISS(ztfid):
+            """
+            reLAISS anomaly detection filter
+            Returns anomaly score and filter result
+            """
+            from app.anomaly_service import process_new_objects_for_anomalies
+            result = process_new_objects_for_anomalies([ztfid])
+            if result and ztfid in result:
+                return {
+                    "label": "Anomalous" if result[ztfid]["anomaly_score"] > 0.6 else "Normal",
+                    "score": result[ztfid]["anomaly_score"] * 100
+                }
+            return {"label": "Unknown", "score": 0.0}
+      
+  snia-like: []
+  ccsn-like: []
+  long-lived: []
+  precursor: []
+
+# Global settings
+settings:
+  run_after_feature_extraction: true
+  max_concurrent_filters: 3
+  log_level: "INFO"
+  cache_results: true
+  cache_duration_hours: 24 

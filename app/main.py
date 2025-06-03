@@ -57,7 +57,7 @@ from .feature_extractor import extract_features_for_recent_objects, get_last_ext
 from .pending_votes import get_pending_objects_for_science_case, remove_pending_vote
 from .database import SessionLocal
 from .anomaly_service import anomaly_service
-from .classifier_manager import classifier_manager
+from .filter_manager import filter_manager
 
 # Configure logging
 log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -2332,9 +2332,9 @@ async def get_classifier_badges(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get classifier badge information for a ZTFID."""
+    """Get filter badge information for a ZTFID."""
     try:
-        badges = classifier_manager.get_classifier_badge_info(db, ztfid)
+        badges = filter_manager.get_filter_badge_info(db, ztfid)
         
         return {
             'ztfid': ztfid,
@@ -2364,11 +2364,11 @@ async def get_algorithm_config(
         )
     
     try:
-        config = classifier_manager.load_config()
+        config = filter_manager.load_config()
         if not config:
             raise HTTPException(status_code=500, detail="Failed to load configuration")
         
-        return classifier_manager.config
+        return filter_manager.config
         
     except Exception as e:
         logger.error(f"Error getting algorithm config: {e}")
@@ -2391,20 +2391,20 @@ async def save_algorithm_config(
         data = await request.json()
         
         # Validate the configuration structure
-        required_keys = ['classifiers', 'settings']
+        required_keys = ['filters', 'settings']
         for key in required_keys:
             if key not in data:
                 raise HTTPException(status_code=400, detail=f"Missing required key: {key}")
         
         # Write the configuration to the YAML file
         import yaml
-        config_path = classifier_manager.config_path
+        config_path = filter_manager.config_path
         
         with open(config_path, 'w') as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
         
         # Reload the configuration in memory
-        classifier_manager.load_config()
+        filter_manager.load_config()
         
         logger.info(f"Algorithm configuration updated by {current_user.username}")
         
