@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Algorithm Management - Transient Recommender{% endblock %}
+{% block title %}Admin - Transient Recommender{% endblock %}
 
 {% block extra_head %}
 <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css" rel="stylesheet">
@@ -60,7 +60,7 @@
     <div class="row">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2><i class="fas fa-cogs"></i> Algorithm Management</h2>
+                <h2><i class="fas fa-filter"></i> Filter Management</h2>
                 <div>
                     <button id="saveConfig" class="btn btn-primary me-2" disabled>
                         <i class="fas fa-save"></i> Save Configuration
@@ -74,19 +74,27 @@
             <!-- Loading indicator -->
             <div id="loadingIndicator" class="text-center py-5">
                 <div class="spinner-border" role="status">
-                    <span class="visually-hidden">Loading algorithms...</span>
+                    <span class="visually-hidden">Loading filter configuration...</span>
                 </div>
-                <p class="mt-2">Loading algorithm configuration...</p>
+                <p class="mt-2">Loading filter configuration...</p>
             </div>
 
-            <!-- Science Case Tabs -->
-            <div id="algorithmTabs" style="display: none;">
-                <ul class="nav nav-tabs" id="scienceCaseTabs" role="tablist">
-                    <!-- Tabs will be populated dynamically -->
-                </ul>
-                
-                <div class="tab-content mt-3" id="scienceCaseTabsContent">
-                    <!-- Tab content will be populated dynamically -->
+            <!-- Filter Management Card -->
+            <div id="filterManagement" class="card" style="display: none;">
+                <div class="card-header">
+                    <h5><i class="fas fa-filter"></i> Filter Settings</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Science Case Tabs -->
+                    <div id="algorithmTabs">
+                        <ul class="nav nav-tabs" id="scienceCaseTabs" role="tablist">
+                            <!-- Tabs will be populated dynamically -->
+                        </ul>
+                        
+                        <div class="tab-content mt-3" id="scienceCaseTabsContent">
+                            <!-- Tab content will be populated dynamically -->
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -180,15 +188,7 @@
                     <div class="row mt-3">
                         <div class="col-md-6">
                             <label for="newAlgThreshold" class="form-label">Confidence Threshold (%)</label>
-                            <input type="number" class="form-control" id="newAlgThreshold" value="70" min="0" max="100" step="0.1">
-                        </div>
-                        <div class="col-md-6">
-                            <label for="newAlgPriority" class="form-label">Priority</label>
-                            <select class="form-select" id="newAlgPriority">
-                                <option value="1">High (1)</option>
-                                <option value="2" selected>Medium (2)</option>
-                                <option value="3">Low (3)</option>
-                            </select>
+                            <input type="number" class="form-control" id="newAlgThreshold" value="60" min="0" max="100" step="0.1">
                         </div>
                     </div>
                     <div class="row mt-3">
@@ -263,14 +263,6 @@
                         <div class="col-md-6">
                             <label for="editAlgThreshold" class="form-label">Confidence Threshold (%)</label>
                             <input type="number" class="form-control" id="editAlgThreshold" min="0" max="100" step="0.1">
-                        </div>
-                        <div class="col-md-6">
-                            <label for="editAlgPriority" class="form-label">Priority</label>
-                            <select class="form-select" id="editAlgPriority">
-                                <option value="1">High (1)</option>
-                                <option value="2">Medium (2)</option>
-                                <option value="3">Low (3)</option>
-                            </select>
                         </div>
                     </div>
                     <div class="row mt-3">
@@ -503,7 +495,6 @@ function renderScienceCaseContent(scienceCase) {
                                 <p class="text-muted mb-2">${algorithm.description || 'No description provided'}</p>
                                 <div class="d-flex gap-3">
                                     <small><strong>Threshold:</strong> ${algorithm.threshold}%</small>
-                                    <small><strong>Priority:</strong> ${algorithm.priority}</small>
                                     ${algorithm.url ? `<small><a href="${algorithm.url}" target="_blank"><i class="fas fa-external-link-alt"></i> Documentation</a></small>` : ''}
                                 </div>
                             </div>
@@ -551,8 +542,36 @@ function showAddAlgorithmModal(scienceCase) {
     // Reset form
     document.getElementById('newAlgorithmForm').reset();
     document.getElementById('newAlgEnabled').checked = true;
-    document.getElementById('newAlgThreshold').value = 70;
-    document.getElementById('newAlgPriority').value = 2;
+    document.getElementById('newAlgThreshold').value = 60;
+    
+    // Set default reLAISS code for anomalous science case
+    if (scienceCase === 'anomalous') {
+        document.getElementById('newAlgName').value = 'reLAISS';
+        document.getElementById('newAlgDescription').value = 'Anomaly filter using light curve morphology';
+        document.getElementById('newAlgUrl').value = 'https://github.com/alexandergagliano/reLAISS';
+        document.getElementById('newAlgCode').value = `def reLAISS_filter(ztfid, confidence_threshold):
+    """
+    reLAISS anomaly detection filter
+    Returns anomaly score based on light curve morphology
+    """
+    import numpy as np
+    from scipy import stats
+    
+    # This is a placeholder implementation
+    # Replace with actual reLAISS algorithm
+    
+    # Simulate anomaly score (replace with real implementation)
+    # Higher scores indicate more anomalous behavior
+    anomaly_score = np.random.uniform(0, 100)
+    
+    if anomaly_score >= confidence_threshold:
+        return {
+            'label': 'Anomalous Transient',
+            'score': anomaly_score
+        }
+    else:
+        return None  # Not anomalous enough`;
+    }
     
     new bootstrap.Modal(document.getElementById('addAlgorithmModal')).show();
 }
@@ -566,7 +585,6 @@ function editAlgorithm(scienceCase, algorithmId) {
     document.getElementById('editAlgName').value = algorithm.name;
     document.getElementById('editAlgUrl').value = algorithm.url || '';
     document.getElementById('editAlgThreshold').value = algorithm.threshold;
-    document.getElementById('editAlgPriority').value = algorithm.priority;
     document.getElementById('editAlgDescription').value = algorithm.description || '';
     document.getElementById('editAlgCode').value = algorithm.code || '';
     document.getElementById('editAlgEnabled').checked = algorithm.enabled;
@@ -587,7 +605,6 @@ async function addNewAlgorithm() {
         name: document.getElementById('newAlgName').value,
         url: document.getElementById('newAlgUrl').value,
         threshold: parseFloat(document.getElementById('newAlgThreshold').value),
-        priority: parseInt(document.getElementById('newAlgPriority').value),
         description: document.getElementById('newAlgDescription').value,
         code: document.getElementById('newAlgCode').value,
         enabled: document.getElementById('newAlgEnabled').checked
@@ -621,7 +638,6 @@ async function updateAlgorithm() {
     algorithm.name = document.getElementById('editAlgName').value;
     algorithm.url = document.getElementById('editAlgUrl').value;
     algorithm.threshold = parseFloat(document.getElementById('editAlgThreshold').value);
-    algorithm.priority = parseInt(document.getElementById('editAlgPriority').value);
     algorithm.description = document.getElementById('editAlgDescription').value;
     algorithm.code = document.getElementById('editAlgCode').value;
     algorithm.enabled = document.getElementById('editAlgEnabled').checked;
@@ -693,7 +709,7 @@ function resetConfiguration() {
 
 function hideLoading() {
     document.getElementById('loadingIndicator').style.display = 'none';
-    document.getElementById('algorithmTabs').style.display = 'block';
+    document.getElementById('filterManagement').style.display = 'block';
     document.getElementById('globalSettings').style.display = 'block';
     document.getElementById('scienceSettings').style.display = 'block';
 }
