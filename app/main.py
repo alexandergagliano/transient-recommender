@@ -193,12 +193,39 @@ async def home(request: Request, current_user: models.User = Depends(get_current
 @app.get("/debug/source")
 async def debug_source(request: Request):
     """Debug endpoint to see raw HTML being served."""
-    response = templates.TemplateResponse("index.html", {"request": request, "current_user": None})
-    html_content = response.body.decode('utf-8') if hasattr(response, 'body') else "Could not get content"
-    
-    # Return as plain text so you can see the raw HTML
     from fastapi.responses import PlainTextResponse
-    return PlainTextResponse(html_content)
+    
+    # Let's just read the template file directly and render it
+    try:
+        import os
+        template_path = os.path.join("app", "templates", "base.html")
+        with open(template_path, 'r') as f:
+            content = f.read()
+        
+        # Look for the CSS link
+        css_line = ""
+        for line in content.split('\n'):
+            if 'static/styles.css' in line:
+                css_line = line.strip()
+                break
+        
+        debug_info = f"""Debug Info for Mixed Content Issue:
+
+Template File Content (base.html CSS link):
+{css_line}
+
+Request Info:
+- Host: {request.url.hostname}
+- Scheme: {request.url.scheme}
+- Headers: {dict(request.headers)}
+
+If the CSS link above shows 'https://' but browser still gets 'http://', 
+then something in Apache/proxy is converting the URLs.
+"""
+        return PlainTextResponse(debug_info)
+        
+    except Exception as e:
+        return PlainTextResponse(f"Debug error: {str(e)}")
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
