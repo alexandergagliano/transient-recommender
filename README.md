@@ -10,6 +10,7 @@ Web application for astronomical transient discovery and target selection using 
 - User authentication and target management
 - Automated finder chart generation
 - Audio annotation support for observations
+- Automated classifier integration with pending vote system
 - SQLite database with 25,515+ transient objects
 - Production deployment with Docker and nginx
 
@@ -77,6 +78,20 @@ Configure SMTP settings in `app.py` for password reset functionality.
 - **ML Pipeline**: Real-time feature extraction and scoring
 - **Security**: CSRF protection, session management, rate limiting
 - **Deployment**: Docker containerization with nginx reverse proxy
+
+## Automated Classifiers
+
+The system supports automated classifiers that can add objects to pending queues for specific science cases. Import from `app.pending_votes`:
+
+```python
+from app.pending_votes import create_pending_vote_for_science_case
+
+# Add a SN Ia candidate to the pending queue
+create_pending_vote_for_science_case(
+    db, "ZTF21example", "snia-like", 
+    {"classifier": "MySNIaClassifier", "confidence": 0.85}
+)
+```
 
 ## Documentation
 

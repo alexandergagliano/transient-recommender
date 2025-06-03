@@ -38,7 +38,7 @@ class Vote(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     ztfid = Column(String, index=True)
-    vote_type = Column(String)  # "like", "dislike", "target", or "skip"
+    vote_type = Column(String)  # "like", "dislike", "target", "skip", or "pending"
     science_case = Column(String)
     vote_details = Column(JSON, nullable=True)  # Renamed from metadata
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -175,4 +175,39 @@ class PasswordResetToken(Base):
     used_at = Column(DateTime, nullable=True)
     
     # Relationships
-    user = relationship("User", back_populates="password_reset_tokens") 
+    user = relationship("User", back_populates="password_reset_tokens")
+
+class AnomalyDetectionResult(Base):
+    """Model to store anomaly detection results."""
+    
+    __tablename__ = "anomaly_detection_results"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    ztfid = Column(String, index=True)
+    anomaly_score = Column(Float)  # Overall anomaly score (percentage)
+    mjd_anom = Column(JSON, nullable=True)  # MJD values where anomalies were detected
+    anom_scores = Column(JSON, nullable=True)  # Individual anomaly scores at each MJD
+    norm_scores = Column(JSON, nullable=True)  # Normalization scores
+    detection_threshold = Column(Float, default=60.0)  # Threshold used for detection
+    is_anomalous = Column(Boolean, default=False)  # Whether this object exceeded threshold
+    feature_extraction_run_id = Column(Integer, ForeignKey("feature_extraction_runs.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Add unique constraint to prevent duplicate results for same object
+    __table_args__ = (
+        UniqueConstraint('ztfid', name='unique_anomaly_result'),
+    )
+
+class AnomalyNotification(Base):
+    """Model to track anomaly detection notifications."""
+    
+    __tablename__ = "anomaly_notifications"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    detection_run_id = Column(Integer, ForeignKey("feature_extraction_runs.id"))
+    objects_detected = Column(Integer, default=0)  # Number of anomalous objects found
+    ztfids_detected = Column(JSON, nullable=True)  # List of ZTFIDs that were flagged
+    created_at = Column(DateTime, default=datetime.utcnow)
+    acknowledged = Column(Boolean, default=False)  # Whether user has seen this notification
+    acknowledged_at = Column(DateTime, nullable=True) 

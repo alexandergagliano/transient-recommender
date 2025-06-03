@@ -21,6 +21,7 @@ from astroplan import Observer, FixedTarget, observability_table, is_observable,
 from astroplan.constraints import TimeConstraint
 
 from . import models
+from .pending_votes import get_pending_objects_for_science_case
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -579,6 +580,23 @@ class WebRecommender:
             
             raise NoObjectsAvailableError(message, active_constraints)
         
+        # Check for pending objects for the current science case
+        pending_science_objects = []
+        if science_case and science_case != "all":
+            try:
+                pending_objects = get_pending_objects_for_science_case(db, science_case)
+                # Filter to objects that are available (not voted on by this user)
+                for ztfid in pending_objects:
+                    if ztfid not in excluded_ids and ztfid in ztfids:
+                        pending_science_objects.append(ztfid)
+                
+                if pending_science_objects:
+                    logger.info(f"Found {len(pending_science_objects)} pending objects for {science_case} science case")
+                else:
+                    logger.info(f"No pending objects found for {science_case} science case")
+            except Exception as e:
+                logger.error(f"Error checking for pending objects for {science_case}: {e}")
+        
         # Filter to available objects
         available_indices = np.where(available_mask)[0]
         X_available = X_scaled[available_indices]
@@ -680,6 +698,15 @@ class WebRecommender:
                     seed_features = X_available[seed_idx[0]]
                     similarities = np.exp(-2.0 * np.linalg.norm(X_available - seed_features, axis=1))
                     final_scores -= similarities
+        
+        # Boost pending objects for the current science case
+        if science_case and science_case != "all" and pending_science_objects:
+            for pending_ztfid in pending_science_objects:
+                pending_idx = np.where(ztfids_available == pending_ztfid)[0]
+                if len(pending_idx) > 0:
+                    # Give a large boost to pending objects for this science case
+                    final_scores[pending_idx[0]] += 1000.0  # Very high priority
+                    logger.info(f"Boosted pending {science_case} object: {pending_ztfid}")
         
         # Get top k recommendations
         top_k_indices = np.argsort(final_scores)[-k:][::-1]
