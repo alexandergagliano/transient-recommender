@@ -2364,63 +2364,13 @@ async def get_algorithm_config(
         )
     
     try:
-        # Check if config file exists
-        config_path = Path(filter_manager.config_path)
-        if not config_path.exists():
-            logger.error(f"Algorithm config file not found at: {config_path}")
-            # Return a default configuration
-            default_config = {
-                "filters": {
-                    "anomalous": [],
-                    "snia-like": [],
-                    "ccsn-like": [],
-                    "long-lived": [],
-                    "precursor": []
-                },
-                "settings": {
-                    "run_after_feature_extraction": True,
-                    "max_concurrent_filters": 3,
-                    "log_level": "INFO",
-                    "cache_results": True,
-                    "cache_duration_hours": 24
-                }
-            }
-            return default_config
-        
-        # Try to load the configuration
         if not filter_manager.load_config():
-            logger.error("Filter manager failed to load configuration")
-            # Check specific error details
-            try:
-                import yaml
-                logger.info("PyYAML import successful")
-                with open(config_path, 'r') as f:
-                    test_load = yaml.safe_load(f)
-                    logger.info(f"Direct YAML load successful: {bool(test_load)}")
-            except ImportError as ie:
-                logger.error(f"PyYAML import error: {ie}")
-                raise HTTPException(status_code=500, detail="PyYAML module not available. Please rebuild the Docker container.")
-            except Exception as ye:
-                logger.error(f"YAML parsing error: {ye}")
-                raise HTTPException(status_code=500, detail=f"YAML parsing error: {str(ye)}")
-            
-            raise HTTPException(status_code=500, detail="Failed to load configuration - check server logs")
-        
-        if not filter_manager.config:
-            logger.error("Filter manager config is None after successful load")
-            raise HTTPException(status_code=500, detail="Configuration loaded but is empty")
+            raise HTTPException(status_code=500, detail="Failed to load configuration")
         
         return filter_manager.config
         
-    except HTTPException:
-        # Re-raise HTTP exceptions as-is
-        raise
     except Exception as e:
-        logger.error(f"Unexpected error getting algorithm config: {e}")
-        logger.error(f"Exception type: {type(e).__name__}")
-        logger.error(f"Exception details: {str(e)}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error(f"Error getting algorithm config: {e}")
         raise HTTPException(status_code=500, detail=f"Error loading configuration: {str(e)}")
 
 @api_app.post("/admin/algorithm-config")
