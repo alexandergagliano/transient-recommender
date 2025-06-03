@@ -9,29 +9,89 @@
 
 filters:
   anomalous:
-    - name: "reLAISS"
+    - id: 1
+      name: "reLAISS"
       description: "Anomaly filter using light curve morphology"
-      url: "https://github.com/evan-reynolds/re-laiss"
+      url: "https://github.com/alexandergagliano/reLAISS"
       enabled: true
-      confidence_threshold: 60.0
+      threshold: 60.0
       module: "app.anomaly_service"
       function: "process_new_objects_for_anomalies"
-      python_code: |
-        def reLAISS(ztfid, confidence_threshold):
+      created_by: "Admin"
+      created_date: "2025-01-08T00:00:00"
+      code: |
+        def reLAISS_filter(ztfid, confidence_threshold):
             """
-            reLAISS anomaly detection filter
-            Returns anomaly score and filter result
+            reLAISS anomaly detection filter using actual implementation
+            Returns anomaly score based on light curve morphology
             """
-            from app.anomaly_service import process_new_objects_for_anomalies
-            result = process_new_objects_for_anomalies([ztfid])
-            if result and ztfid in result:
-                # Use the confidence_threshold from admin panel instead of hardcoding
-                threshold_decimal = confidence_threshold / 100.0  # Convert percentage to decimal
-                return {
-                    "label": "Anomalous" if result[ztfid]["anomaly_score"] > threshold_decimal else "Normal",
-                    "score": result[ztfid]["anomaly_score"] * 100
-                }
-            return {"label": "Unknown", "score": 0.0}
+            import sys
+            import numpy as np
+            sys.path.append('./laiss_final/re-laiss/src')
+            
+            try:
+                import relaiss
+                from relaiss.anomaly import anomaly_detection
+                
+                # Initialize reLAISS client
+                client = relaiss.ReLAISS()
+                
+                # Load reference with 25 light curve features
+                client.load_reference(
+                    lc_features=[
+                        'mean_g-r', 'g_peak_mag', 'r_peak_mag', 'g_amplitude', 'r_amplitude', 
+                        'g-r_at_g_peak', 'mean_color_rate', 'g_peak_time', 'r_peak_time', 
+                        'g_rise_time', 'r_rise_time', 'g_decline_time', 'r_decline_time', 
+                        'g_duration_above_half_flux', 'r_duration_above_half_flux', 
+                        'g_beyond_2sigma', 'r_beyond_2sigma', 'g_mean_rolling_variance', 
+                        'r_mean_rolling_variance', 'g_n_peaks', 'r_n_peaks', 
+                        'g_rise_local_curvature', 'g_decline_local_curvature', 
+                        'r_rise_local_curvature', 'r_decline_local_curvature'
+                    ],
+                    host_features=[],
+                    path_to_sfd_folder='./data/sfddata-master',
+                    force_recreation_of_index=True,
+                    building_for_AD=True, 
+                    num_trees=1000, 
+                    use_pca=False, 
+                    weight_lc=1.0 
+                )
+                
+                # Run anomaly detection
+                mjd_anom, anom_scores, norm_scores = anomaly_detection(
+                    client=client,
+                    transient_ztf_id=ztfid,
+                    lc_features=client.lc_features,
+                    host_features=[],
+                    path_to_timeseries_folder="./laiss_final/timeseries", 
+                    path_to_sfd_folder='./data/sfddata-master',         
+                    path_to_dataset_bank=client.bank_csv,
+                    path_to_models_directory="./laiss_final/models",       
+                    save_figures=False,  # No plotting in production
+                    anom_thresh=30,  
+                    force_retrain=False,  # Don't retrain in production
+                    return_scores=True,  # Return the scores
+                    preprocessed_df=None
+                )
+                
+                # Get maximum anomaly score across all epochs
+                max_anomaly_score = np.max(anom_scores) if len(anom_scores) > 0 else 0
+                
+                # Convert to 0-100 scale and check against threshold
+                anomaly_percentage = max_anomaly_score
+                
+                if anomaly_percentage >= confidence_threshold:
+                    return {
+                        'label': 'Anomalous Transient',
+                        'score': float(anomaly_percentage)
+                    }
+                else:
+                    return None  # Not anomalous enough
+                    
+            except Exception as e:
+                # Fallback in case of errors
+                print(f"reLAISS error for {ztfid}: {e}")
+                return None
       
   snia-like: []
   ccsn-like: []
