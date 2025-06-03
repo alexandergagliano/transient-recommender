@@ -96,8 +96,26 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             logger.error(f"Request failed: {request.method} {request.url} - Error: {e}", exc_info=True)
             raise
 
+# Apache proxy headers middleware for HTTPS support
+class ApacheProxyHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        # Trust Apache proxy headers for HTTPS
+        if "X-Forwarded-Proto" in request.headers:
+            forwarded_proto = request.headers["X-Forwarded-Proto"]
+            if forwarded_proto == "https":
+                request.scope["scheme"] = "https"
+        
+        # Also check for other common Apache headers
+        if "X-Forwarded-SSL" in request.headers and request.headers["X-Forwarded-SSL"] == "on":
+            request.scope["scheme"] = "https"
+            
+        response = await call_next(request)
+        return response
+
 # Add the middleware to both apps
+app.add_middleware(ApacheProxyHeadersMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
+api_app.add_middleware(ApacheProxyHeadersMiddleware) 
 api_app.add_middleware(RequestLoggingMiddleware)
 
 # Move token route to the beginning to test if position matters
