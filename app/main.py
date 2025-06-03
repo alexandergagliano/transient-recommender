@@ -168,64 +168,13 @@ async def chrome_devtools():
     """Handle Chrome DevTools request to prevent 404 errors."""
     return {"message": "No DevTools configuration"}
 
-@app.get("/debug/headers")
-async def debug_headers(request: Request):
-    """Debug endpoint to check what headers we're receiving from Apache."""
-    return {
-        "scheme": request.url.scheme,
-        "host": request.url.hostname,
-        "port": request.url.port,
-        "path": request.url.path,
-        "full_url": str(request.url),
-        "headers": dict(request.headers),
-        "forwarded_proto": request.headers.get("X-Forwarded-Proto"),
-        "forwarded_ssl": request.headers.get("X-Forwarded-SSL"),
-        "forwarded_host": request.headers.get("X-Forwarded-Host"),
-        "scope_scheme": request.scope.get("scheme"),
-        "scope_server": request.scope.get("server")
-    }
+
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, current_user: models.User = Depends(get_current_user_optional)):
     """Home page."""
     return templates.TemplateResponse("index.html", {"request": request, "current_user": current_user})
 
-@app.get("/debug/source")
-async def debug_source(request: Request):
-    """Debug endpoint to see raw HTML being served."""
-    from fastapi.responses import PlainTextResponse
-    
-    # Let's just read the template file directly and render it
-    try:
-        import os
-        template_path = os.path.join("app", "templates", "base.html")
-        with open(template_path, 'r') as f:
-            content = f.read()
-        
-        # Look for the CSS link
-        css_line = ""
-        for line in content.split('\n'):
-            if 'static/styles.css' in line:
-                css_line = line.strip()
-                break
-        
-        debug_info = f"""Debug Info for Mixed Content Issue:
-
-Template File Content (base.html CSS link):
-{css_line}
-
-Request Info:
-- Host: {request.url.hostname}
-- Scheme: {request.url.scheme}
-- Headers: {dict(request.headers)}
-
-If the CSS link above shows 'https://' but browser still gets 'http://', 
-then something in Apache/proxy is converting the URLs.
-"""
-        return PlainTextResponse(debug_info)
-        
-    except Exception as e:
-        return PlainTextResponse(f"Debug error: {str(e)}")
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
