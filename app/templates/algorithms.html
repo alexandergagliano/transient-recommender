@@ -367,7 +367,7 @@ function renderTabs() {
     tabsContainer.innerHTML = '';
     contentContainer.innerHTML = '';
     
-    const scienceCases = Object.keys(algorithmConfig.science_cases || {});
+    const scienceCases = Object.keys(algorithmConfig.filters || {});
     
     scienceCases.forEach((scienceCase, index) => {
         // Create tab
@@ -394,7 +394,7 @@ function renderTabs() {
 }
 
 function renderScienceCaseContent(scienceCase) {
-    const algorithms = algorithmConfig.science_cases[scienceCase] || [];
+    const algorithms = algorithmConfig.filters[scienceCase] || [];
     
     let content = `
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -452,7 +452,7 @@ function renderScienceCaseContent(scienceCase) {
 }
 
 function renderGlobalSettings() {
-    const settings = algorithmConfig.global_settings || {};
+    const settings = algorithmConfig.settings || {};
     
     document.getElementById('runAfterExtraction').value = settings.run_after_extraction || 'true';
     document.getElementById('maxConcurrent').value = settings.max_concurrent || 3;
@@ -475,7 +475,7 @@ function showAddAlgorithmModal(scienceCase) {
 }
 
 function editAlgorithm(scienceCase, algorithmId) {
-    const algorithm = algorithmConfig.science_cases[scienceCase].find(alg => alg.id === algorithmId);
+    const algorithm = algorithmConfig.filters[scienceCase].find(alg => alg.id === algorithmId);
     if (!algorithm) return;
     
     document.getElementById('editAlgId').value = algorithmId;
@@ -510,11 +510,11 @@ async function addNewAlgorithm() {
         enabled: document.getElementById('newAlgEnabled').checked
     };
     
-    if (!algorithmConfig.science_cases[scienceCase]) {
-        algorithmConfig.science_cases[scienceCase] = [];
+    if (!algorithmConfig.filters[scienceCase]) {
+        algorithmConfig.filters[scienceCase] = [];
     }
     
-    algorithmConfig.science_cases[scienceCase].push(newAlgorithm);
+    algorithmConfig.filters[scienceCase].push(newAlgorithm);
     markAsChanged();
     renderTabs();
     
@@ -532,7 +532,7 @@ async function updateAlgorithm() {
     const scienceCase = document.getElementById('editAlgScienceCase').value;
     const algorithmId = parseInt(document.getElementById('editAlgId').value);
     
-    const algorithm = algorithmConfig.science_cases[scienceCase].find(alg => alg.id === algorithmId);
+    const algorithm = algorithmConfig.filters[scienceCase].find(alg => alg.id === algorithmId);
     if (!algorithm) return;
     
     algorithm.name = document.getElementById('editAlgName').value;
@@ -556,7 +556,7 @@ async function deleteAlgorithm() {
     const scienceCase = document.getElementById('editAlgScienceCase').value;
     const algorithmId = parseInt(document.getElementById('editAlgId').value);
     
-    algorithmConfig.science_cases[scienceCase] = algorithmConfig.science_cases[scienceCase].filter(
+    algorithmConfig.filters[scienceCase] = algorithmConfig.filters[scienceCase].filter(
         alg => alg.id !== algorithmId
     );
     
@@ -570,7 +570,7 @@ async function deleteAlgorithm() {
 async function saveConfiguration() {
     try {
         // Update global settings
-        algorithmConfig.global_settings = {
+        algorithmConfig.settings = {
             run_after_extraction: document.getElementById('runAfterExtraction').value === 'true',
             max_concurrent: parseInt(document.getElementById('maxConcurrent').value),
             log_level: document.getElementById('logLevel').value,
