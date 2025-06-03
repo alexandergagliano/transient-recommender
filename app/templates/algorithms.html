@@ -614,14 +614,6 @@ function hideLoading() {
     document.getElementById('globalSettings').style.display = 'block';
 }
 
-function showToast(message, type) {
-    // Use the existing showToast function from app.js if available
-    if (typeof window.showToast === 'function') {
-        window.showToast(message, type);
-    } else {
-        // Fallback alert
-        alert(message);
-    }
-}
+// Use the showToast function from app.js (automatically available in global scope)
 </script>
 {% endblock %} 
