@@ -168,10 +168,37 @@ async def chrome_devtools():
     """Handle Chrome DevTools request to prevent 404 errors."""
     return {"message": "No DevTools configuration"}
 
+@app.get("/debug/headers")
+async def debug_headers(request: Request):
+    """Debug endpoint to check what headers we're receiving from Apache."""
+    return {
+        "scheme": request.url.scheme,
+        "host": request.url.hostname,
+        "port": request.url.port,
+        "path": request.url.path,
+        "full_url": str(request.url),
+        "headers": dict(request.headers),
+        "forwarded_proto": request.headers.get("X-Forwarded-Proto"),
+        "forwarded_ssl": request.headers.get("X-Forwarded-SSL"),
+        "forwarded_host": request.headers.get("X-Forwarded-Host"),
+        "scope_scheme": request.scope.get("scheme"),
+        "scope_server": request.scope.get("server")
+    }
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, current_user: models.User = Depends(get_current_user_optional)):
     """Home page."""
     return templates.TemplateResponse("index.html", {"request": request, "current_user": current_user})
+
+@app.get("/debug/source")
+async def debug_source(request: Request):
+    """Debug endpoint to see raw HTML being served."""
+    response = templates.TemplateResponse("index.html", {"request": request, "current_user": None})
+    html_content = response.body.decode('utf-8') if hasattr(response, 'body') else "Could not get content"
+    
+    # Return as plain text so you can see the raw HTML
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(html_content)
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
