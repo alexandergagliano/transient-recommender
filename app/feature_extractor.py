@@ -253,7 +253,7 @@ def get_daily_objects(lookback_days: float = 20.0, lookback_t_first: float = 500
                 })
                 
                 if i < 5:
-                                            logger.debug(f"Successfully processed {ztfid} at RA={ra:.4f}, Dec={dec:.4f}")
+                    logger.debug(f"Successfully processed {ztfid} at RA={ra:.4f}, Dec={dec:.4f}")
                 
             except Exception as e:
                 if i < 10:  # Only log errors for first 10 failures

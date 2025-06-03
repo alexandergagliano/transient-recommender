@@ -9,13 +9,13 @@
 
 filters:
   anomalous:
-          - name: "reLAISS"
-        description: "Anomaly filter using light curve morphology"
-        url: "https://github.com/evan-reynolds/re-laiss"
-        enabled: true
-        confidence_threshold: 60.0
-        module: "app.anomaly_service"
-        function: "process_new_objects_for_anomalies"
+    - name: "reLAISS"
+      description: "Anomaly filter using light curve morphology"
+      url: "https://github.com/evan-reynolds/re-laiss"
+      enabled: true
+      confidence_threshold: 60.0
+      module: "app.anomaly_service"
+      function: "process_new_objects_for_anomalies"
       python_code: |
         def reLAISS(ztfid):
             """

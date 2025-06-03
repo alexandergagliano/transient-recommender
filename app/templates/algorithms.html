@@ -376,7 +376,17 @@
             try {
                 const response = await fetch('/api/admin/algorithm-config');
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    // Try to get error details from response
+                    let errorDetails = `HTTP ${response.status}: ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        if (errorData.detail) {
+                            errorDetails += ` - ${errorData.detail}`;
+                        }
+                    } catch (e) {
+                        // Response body wasn't JSON, that's ok
+                    }
+                    throw new Error(errorDetails);
                 }
                 
                 const config = await response.json();
@@ -390,9 +400,18 @@
                 
             } catch (error) {
                 console.error('Error loading algorithm configuration:', error);
-                showToast('Error loading algorithm configuration', 'error');
+                const errorMessage = error.message || 'Unknown error';
+                showToast(`Error loading algorithm configuration: ${errorMessage}`, 'error');
+                
+                let alertMessage = 'Failed to load algorithm configuration.';
+                if (errorMessage.includes('PyYAML')) {
+                    alertMessage += ' The PyYAML module is missing. Please rebuild the Docker container with: <code>docker-compose down && docker-compose up --build -d</code>';
+                } else {
+                    alertMessage += ` Error: ${errorMessage}`;
+                }
+                
                 document.getElementById('loadingIndicator').innerHTML = 
-                    '<div class="alert alert-danger">Failed to load algorithm configuration. Please refresh the page.</div>';
+                    `<div class="alert alert-danger">${alertMessage}</div>`;
             }
         }
 
