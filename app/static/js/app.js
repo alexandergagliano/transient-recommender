@@ -2123,18 +2123,26 @@ async function loadExtractionStatus() {
         } else if (data.status === 'running') {
             const runtimeHours = data.runtime_hours || 0;
             const isStuck = data.is_stuck || false;
+            const isAutomatic = data.is_automatic !== false; // Default to automatic for older runs
+            const lookbackDays = data.lookback_days || 'unknown';
+            
+            const extractionType = isAutomatic ? 'Automatic' : 'Manual';
+            const extractionIcon = isAutomatic ? 'fa-robot' : 'fa-user-cog';
             
             const stuckWarning = isStuck ? `
                 <div class="alert alert-warning mt-2">
                     <i class="fas fa-exclamation-triangle"></i>
                     <strong>Warning:</strong> Extraction has been running for ${runtimeHours.toFixed(1)} hours and may be stuck.
-                    Contact an administrator if this persists.
+                    ${window.currentUser?.is_admin ? '<button class="btn btn-sm btn-warning ml-2" onclick="clearStuckExtraction()">Clear Stuck Run</button>' : 'Contact an administrator if this persists.'}
                 </div>
             ` : '';
             
             statusDiv.innerHTML = `
                 <p class="text-${isStuck ? 'warning' : 'info'}">
                     <i class="fas fa-cogs fa-spin"></i>
+                    <span class="badge badge-${isAutomatic ? 'primary' : 'secondary'} mr-2">
+                        <i class="fas ${extractionIcon}"></i> ${extractionType}
+                    </span>
                     Feature extraction is currently running... (${runtimeHours.toFixed(1)}h)
                 </p>
                 <div class="progress mt-2">
@@ -2142,32 +2150,66 @@ async function loadExtractionStatus() {
                          role="progressbar" style="width: 70%"></div>
                 </div>
                 <p class="small text-muted mt-2">
-                    Extraction in progress. You'll be notified when complete.
+                    ${isAutomatic ? `🤖 System automatically started extraction looking back ${lookbackDays} days.` : '👤 Manual extraction in progress.'}
+                    You'll be notified when complete.
                 </p>
                 ${stuckWarning}
             `;
             if (triggerButton) {
-                triggerButton.innerHTML = '<i class="fas fa-cogs fa-spin"></i> Running...';
-                triggerButton.disabled = true;
+                if (isAutomatic) {
+                    // Automatic extraction running - disable manual button with different styling
+                    triggerButton.innerHTML = '<i class="fas fa-robot"></i> Auto Running';
+                    triggerButton.disabled = true;
+                    triggerButton.classList.add('btn-secondary');
+                    triggerButton.classList.remove('btn-primary');
+                    triggerButton.title = 'Automatic extraction in progress. Cannot start manual extraction.';
+                } else {
+                    // Manual extraction running
+                    triggerButton.innerHTML = '<i class="fas fa-cogs fa-spin"></i> Running...';
+                    triggerButton.disabled = true;
+                }
             }
             
-            // Start monitoring if not already running
-            if (!extractionProgressInterval) {
-                console.log('Detected running extraction, starting progress monitoring...');
-                startExtractionProgressMonitoring();
+                    // Start monitoring if not already running
+        if (!extractionProgressInterval) {
+            console.log('Detected running extraction, starting progress monitoring...');
+            startExtractionProgressMonitoring();
+        }
+        
+        // Show detailed progress for admins
+        if (window.currentUser?.is_admin) {
+            loadDetailedProgress();
+            
+            // Also update detailed progress during polling
+            if (extractionProgressInterval) {
+                clearInterval(extractionProgressInterval);
+                extractionProgressInterval = setInterval(() => {
+                    loadExtractionStatus();
+                    loadDetailedProgress(); // Additional detailed info for admins
+                }, 5000);
             }
+        }
         } else if (data.status === 'completed') {
             const runDate = new Date(data.run_date);
             const runDateString = runDate.toLocaleString();
             const now = new Date();
             const hoursAgo = Math.max(0, (now - runDate) / (1000 * 60 * 60)).toFixed(1);
+            const isAutomatic = data.is_automatic !== false; // Default to automatic for older runs
+            const lookbackDays = data.lookback_days || 'unknown';
+            
+            const extractionType = isAutomatic ? 'Automatic' : 'Manual';
+            const extractionIcon = isAutomatic ? 'fa-robot' : 'fa-user-cog';
             
             statusDiv.innerHTML = `
                 <p class="text-success">
                     <i class="fas fa-check-circle"></i>
+                    <span class="badge badge-${isAutomatic ? 'primary' : 'secondary'} mr-2">
+                        <i class="fas ${extractionIcon}"></i> ${extractionType}
+                    </span>
                     Last extraction: ${runDateString} (${hoursAgo} hours ago)
                 </p>
                 <p class="text-muted">
+                    ${isAutomatic ? `🤖 System automatically processed ${lookbackDays} days lookback.` : '👤 Manual extraction completed.'}
                     Found ${data.objects_found || 0} objects, processed ${data.objects_processed || 0} in ${data.processing_time_seconds?.toFixed(1) || '0.0'}s
                 </p>
             `;
@@ -2401,13 +2443,17 @@ function onExtractionComplete(data) {
         const objectsFound = data.objects_found || 0;
         const objectsProcessed = data.objects_processed || 0;
         const lookbackDays = data.lookback_days || 'unknown';
+        const isAutomatic = data.is_automatic !== false; // Default to automatic for older runs
+        
+        const extractionType = isAutomatic ? 'Automatic' : 'Manual';
+        const extractionIcon = isAutomatic ? 'fa-robot' : 'fa-user-cog';
         
         let statusMessage;
         let statusClass;
         
         if (objectsFound === 0) {
             statusMessage = `No new objects found in the last ${lookbackDays} days`;
-            statusClass = 'text-info';
+            statusClass = 'text-warning';
         } else if (objectsProcessed === 0) {
             statusMessage = `Found ${objectsFound} objects but none needed processing (features up to date)`;
             statusClass = 'text-info';
@@ -2419,6 +2465,9 @@ function onExtractionComplete(data) {
         statusDiv.innerHTML = `
             <p class="${statusClass}">
                 <i class="fas fa-${objectsFound === 0 ? 'info-circle' : 'check-circle'}"></i>
+                <span class="badge badge-${isAutomatic ? 'primary' : 'secondary'} mr-2">
+                    <i class="fas ${extractionIcon}"></i> ${extractionType}
+                </span>
                 ${statusMessage}
             </p>
             <div class="progress mt-2">
@@ -2426,11 +2475,12 @@ function onExtractionComplete(data) {
                      role="progressbar" style="width: 100%"></div>
             </div>
             <p class="text-muted mt-2">
+                ${isAutomatic ? `🤖 System automatically searched ${lookbackDays} days.` : `👤 Manual extraction searched ${lookbackDays} days.`}
                 Found ${objectsFound} objects, processed ${objectsProcessed} 
                 ${data.processing_time_seconds ? `in ${data.processing_time_seconds.toFixed(1)}s` : ''}
                 <br>
                 Tip: ${objectsFound === 0 ? 
-                    `Try increasing lookback days or check back later for new detections.` :
+                    `This may be due to Antares server issues or no recent ZTF detections. Try increasing lookback days or check back later.` :
                     `Features are now up to date for recent objects.`
                 }
             </p>
@@ -2504,6 +2554,143 @@ function requestNotificationPermission() {
                 console.log('Notification permission granted');
             }
         });
+    }
+}
+
+// Function to load detailed progress for admins
+async function loadDetailedProgress() {
+    if (!window.currentUser?.is_admin) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/extraction-progress');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.status === 'running') {
+                updateDetailedProgressDisplay(data);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading detailed progress:', error);
+    }
+}
+
+// Function to update detailed progress display for admins
+function updateDetailedProgressDisplay(data) {
+    const statusDiv = document.getElementById('extractionStatus');
+    if (!statusDiv || !window.currentUser?.is_admin) {
+        return;
+    }
+    
+    const currentStep = data.current_step || 0;
+    const steps = data.estimated_steps || [];
+    const progressPercentage = data.progress_percentage || 0;
+    const runtimeMinutes = data.runtime_minutes || 0;
+    const isAutomatic = data.is_automatic !== false;
+    const lookbackDays = data.lookback_days || 'unknown';
+    const totalObjects = data.total_objects_in_db || 'unknown';
+    
+    const extractionType = isAutomatic ? 'Automatic' : 'Manual';
+    const extractionIcon = isAutomatic ? 'fa-robot' : 'fa-user-cog';
+    
+    // Create detailed progress display
+    const stepsHtml = steps.map((step, index) => {
+        const isActive = index === currentStep;
+        const isCompleted = index < currentStep;
+        const iconClass = isCompleted ? 'fa-check-circle text-success' : 
+                         isActive ? 'fa-cog fa-spin text-info' : 
+                         'fa-circle text-muted';
+        
+        return `
+            <div class="d-flex align-items-center mb-1 ${isActive ? 'font-weight-bold' : ''}">
+                <i class="fas ${iconClass} mr-2"></i>
+                <span class="${isCompleted ? 'text-muted' : ''}">${step}</span>
+            </div>
+        `;
+    }).join('');
+    
+    statusDiv.innerHTML = `
+        <div class="admin-progress-details">
+            <p class="text-info">
+                <i class="fas fa-cogs fa-spin"></i>
+                <span class="badge badge-${isAutomatic ? 'primary' : 'secondary'} mr-2">
+                    <i class="fas ${extractionIcon}"></i> ${extractionType}
+                </span>
+                Feature extraction in progress... (${runtimeMinutes.toFixed(1)}m)
+            </p>
+            
+            <div class="progress mt-2 mb-3">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" 
+                     role="progressbar" style="width: ${progressPercentage}%">
+                    ${progressPercentage.toFixed(0)}%
+                </div>
+            </div>
+            
+            <div class="row text-small">
+                <div class="col-md-6">
+                    <div class="card bg-light">
+                        <div class="card-body p-2">
+                            <h6 class="card-title mb-1">📊 Progress Details</h6>
+                            <small>
+                                <strong>Lookback:</strong> ${lookbackDays} days<br>
+                                <strong>Total Objects in DB:</strong> ${totalObjects.toLocaleString()}<br>
+                                <strong>Runtime:</strong> ${runtimeMinutes.toFixed(1)} minutes
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card bg-light">
+                        <div class="card-body p-2">
+                            <h6 class="card-title mb-1">🔄 Current Step</h6>
+                            <div class="extraction-steps">
+                                ${stepsHtml}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <p class="small text-muted mt-2">
+                ${isAutomatic ? '🤖 System automatically started this extraction.' : '👤 Manual extraction in progress.'}
+                Progress updates every 5 seconds.
+            </p>
+        </div>
+    `;
+}
+
+// Function to clear stuck extractions (admin only)
+async function clearStuckExtraction() {
+    if (!window.currentUser?.is_admin) {
+        showToast('Only administrators can clear stuck extractions', 'error', 5000);
+        return;
+    }
+    
+    if (!confirm('Are you sure you want to clear the stuck extraction? This will mark it as failed.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/clear-stuck-extraction', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            showToast(result.message, 'success', 5000);
+            
+            // Reload the extraction status to show the cleared state
+            loadExtractionStatus();
+        } else {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+    } catch (error) {
+        console.error('Error clearing stuck extraction:', error);
+        showToast('Failed to clear stuck extraction: ' + error.message, 'error', 5000);
     }
 }
 

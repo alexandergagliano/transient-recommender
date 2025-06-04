@@ -160,6 +160,7 @@ class FeatureExtractionRun(Base):
     processing_time_seconds = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
+    is_automatic = Column(Boolean, default=True)  # True for automatic runs, False for manual
 
 class PasswordResetToken(Base):
     """Password reset token model for secure password resets."""

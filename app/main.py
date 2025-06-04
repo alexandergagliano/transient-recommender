@@ -17,6 +17,7 @@ from pathlib import Path
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import io # For pydub
+from pydantic import BaseModel
 
 import speech_recognition as sr # For speech-to-text
 from pydub import AudioSegment # For audio conversion
@@ -97,6 +98,11 @@ recommender_engine = recommender.WebRecommender(feature_bank_path)
 
 # Security utilities
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# Pydantic models for request bodies
+class FeatureExtractionRequest(BaseModel):
+    lookback_days: float = 20.0
+    force_reprocess: bool = False
 
 # Custom middleware to log all requests
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -1468,23 +1474,66 @@ async def update_feature_bank(
     recommender_engine.update_feature_bank(db)
     return {"status": "success"}
 
-def run_feature_extraction_background(lookback_days: float, force_reprocess: bool):
-    """Run feature extraction in the background."""
+def run_feature_extraction_manual(lookback_days: float, force_reprocess: bool):
+    """Run manual feature extraction in the background."""
     try:
-        logger.info(f"Starting background feature extraction with lookback_days={lookback_days}, force_reprocess={force_reprocess}")
+        logger.info(f"Starting MANUAL feature extraction with lookback_days={lookback_days}, force_reprocess={force_reprocess}")
         
         # Check if Antares is available and working
+        test_mode = True  # Default to test mode
         try:
             import antares_client
             from antares_client.search import search
+            from astropy.time import Time
+            from astropy import units as u
+            
+            # Test if Antares API is actually working with a broader query
+            logger.info("Testing Antares API connectivity...")
+            end_time = Time.now()
+            start_time = end_time - 30 * u.day  # Use 30-day test query to be more likely to find results
+            
+            test_query = {
+                'query': {
+                    'bool': {
+                        'must': [
+                            {
+                                'range': {
+                                    'properties.newest_alert_observation_time': {
+                                        'gte': start_time.mjd,
+                                        'lte': end_time.mjd
+                                    }
+                                }
+                            },
+                            {
+                                'range': {
+                                    'properties.ztf_object_id': {
+                                        'gte': 'ZTF18',  # Only ZTF objects
+                                        'lte': 'ZTF99'
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+            
+            # Try the test query with timeout
+            logger.info(f"Testing Antares query from MJD {start_time.mjd:.1f} to {end_time.mjd:.1f}")
+            test_results = search(test_query)
+            
+            # Convert to list to check if API is responsive (this triggers the actual call)
+            test_list = list(test_results)
+            
             test_mode = False
-            logger.info("Antares available for background extraction")
+            logger.info(f"Antares API test successful - found {len(test_list)} test results in 30-day window. Using real mode.")
+            logger.info(f"Will now search with user-specified lookback_days={lookback_days}")
+            
         except ImportError as e:
-            test_mode = True
-            logger.warning(f"Antares not available - using test mode for background extraction: {e}")
+            logger.warning(f"antares_client not installed - using test mode: {e}")
         except Exception as e:
-            test_mode = True
-            logger.warning(f"Antares import failed - using test mode for background extraction: {e}")
+            logger.warning(f"Antares API test failed - using test mode: {e}")
+            logger.info("This could be due to Antares server issues or network connectivity")
+            logger.info(f"Will proceed in test mode (no real objects will be processed)")
         
         # Get a new database session for the background task
         db = SessionLocal()
@@ -1493,7 +1542,113 @@ def run_feature_extraction_background(lookback_days: float, force_reprocess: boo
             extraction_run = extract_features_for_recent_objects(
                 db, lookback_days, force_reprocess, test_mode=test_mode
             )
-            logger.info(f"Background feature extraction completed successfully: run_id={extraction_run.id}, objects_processed={extraction_run.objects_processed}")
+            
+            # Mark this as a manual run (safely handle missing column)
+            try:
+                extraction_run.is_automatic = False
+                db.commit()
+            except Exception as e:
+                if "no such column" in str(e):
+                    logger.warning("is_automatic column not yet added - skipping manual flag")
+                else:
+                    raise e
+            
+            if test_mode:
+                logger.warning(f"MANUAL feature extraction completed in TEST MODE - no real objects processed")
+            else:
+                logger.info(f"MANUAL feature extraction completed successfully: run_id={extraction_run.id}, objects_processed={extraction_run.objects_processed}")
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"MANUAL feature extraction failed: {e}", exc_info=True)
+
+def run_feature_extraction_background(lookback_days: float, force_reprocess: bool):
+    """Run feature extraction in the background."""
+    try:
+        logger.info(f"Starting background feature extraction with lookback_days={lookback_days}, force_reprocess={force_reprocess}")
+        
+        # Check if Antares is available and working
+        test_mode = True  # Default to test mode
+        try:
+            import antares_client
+            from antares_client.search import search
+            from astropy.time import Time
+            from astropy import units as u
+            
+            # Test if Antares API is actually working with a broader query
+            logger.info("Testing Antares API connectivity...")
+            end_time = Time.now()
+            start_time = end_time - 30 * u.day  # Use 30-day test query to be more likely to find results
+            
+            test_query = {
+                'query': {
+                    'bool': {
+                        'must': [
+                            {
+                                'range': {
+                                    'properties.newest_alert_observation_time': {
+                                        'gte': start_time.mjd,
+                                        'lte': end_time.mjd
+                                    }
+                                }
+                            },
+                            {
+                                'range': {
+                                    'properties.ztf_object_id': {
+                                        'gte': 'ZTF18',  # Only ZTF objects
+                                        'lte': 'ZTF99'
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+            
+            # Try the test query with timeout
+            logger.info(f"Testing Antares query from MJD {start_time.mjd:.1f} to {end_time.mjd:.1f}")
+            test_results = search(test_query)
+            
+            # Convert to list to check if API is responsive (this triggers the actual call)
+            test_list = list(test_results)
+            
+            test_mode = False
+            logger.info(f"Antares API test successful - found {len(test_list)} test results in 30-day window. Using real mode.")
+            logger.info(f"Will now search with user-specified lookback_days={lookback_days}")
+            
+        except ImportError as e:
+            logger.warning(f"antares_client not installed - using test mode: {e}")
+        except Exception as e:
+            logger.warning(f"Antares API test failed - using test mode: {e}")
+            logger.info("This could be due to Antares server issues or network connectivity")
+            logger.info(f"Will proceed in test mode (no real objects will be processed)")
+        
+        # Get a new database session for the background task
+        db = SessionLocal()
+        
+        try:
+            logger.info(f"Starting extraction with lookback_days={lookback_days}, force_reprocess={force_reprocess}, test_mode={test_mode}")
+            extraction_run = extract_features_for_recent_objects(
+                db, lookback_days, force_reprocess, test_mode=test_mode
+            )
+            
+            # Mark this as an automatic run (safely handle missing column)
+            try:
+                extraction_run.is_automatic = True
+                db.commit()
+            except Exception as e:
+                if "no such column" in str(e):
+                    logger.warning("is_automatic column not yet added - skipping automatic flag")
+                else:
+                    raise e
+            
+            if test_mode:
+                logger.warning(f"Feature extraction completed in TEST MODE - no real objects processed")
+                logger.info(f"Test mode run: lookback_days={extraction_run.lookback_days}, objects_found={extraction_run.objects_found}")
+            else:
+                logger.info(f"Background feature extraction completed successfully: run_id={extraction_run.id}, objects_processed={extraction_run.objects_processed}")
+                logger.info(f"Real mode run: lookback_days={extraction_run.lookback_days}, objects_found={extraction_run.objects_found}, objects_processed={extraction_run.objects_processed}")
         finally:
             db.close()
             
@@ -1502,9 +1657,8 @@ def run_feature_extraction_background(lookback_days: float, force_reprocess: boo
 
 @api_app.post("/extract-features")
 async def extract_features(
+    request: FeatureExtractionRequest,
     background_tasks: BackgroundTasks,
-    lookback_days: float = 20.0,
-    force_reprocess: bool = False,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -1538,9 +1692,9 @@ async def extract_features(
     try:
         # Start extraction in background
         background_tasks.add_task(
-            run_feature_extraction_background,
-            lookback_days,
-            force_reprocess
+            run_feature_extraction_manual,
+            request.lookback_days,
+            request.force_reprocess
         )
         
         logger.info(f"Feature extraction started in background by {current_user.username}")
@@ -1553,6 +1707,97 @@ async def extract_features(
     except Exception as e:
         logger.error(f"Failed to start feature extraction: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@api_app.post("/clear-stuck-extraction")
+async def clear_stuck_extraction(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Clear a stuck extraction run (admin only)."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to perform this action",
+        )
+    
+    try:
+        # Find any running extractions
+        running_runs = db.query(models.FeatureExtractionRun).filter(
+            models.FeatureExtractionRun.status == "running"
+        ).all()
+        
+        if not running_runs:
+            return {"message": "No stuck extractions found", "cleared": 0}
+        
+        # Mark them as failed with a clear message
+        cleared_count = 0
+        for run in running_runs:
+            from astropy.time import Time
+            hours_running = (Time.now().mjd - run.mjd_run) * 24
+            
+            run.status = "failed"
+            run.error_message = f"Manually cleared by admin {current_user.username} after running {hours_running:.1f} hours"
+            run.completed_at = datetime.utcnow()
+            cleared_count += 1
+        
+        db.commit()
+        
+        logger.info(f"Admin {current_user.username} cleared {cleared_count} stuck extraction runs")
+        
+        return {
+            "message": f"Cleared {cleared_count} stuck extraction(s)",
+            "cleared": cleared_count
+        }
+        
+    except Exception as e:
+        logger.error(f"Error clearing stuck extractions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_app.get("/extraction-progress")
+async def get_extraction_progress(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get detailed extraction progress (admin only)."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view detailed progress",
+        )
+    
+    last_run = get_last_extraction_run(db)
+    
+    if not last_run or last_run.status != "running":
+        return {"status": "not_running"}
+    
+    # Get some stats from the database
+    total_objects_in_db = db.query(models.FeatureBank).count()
+    
+    from astropy.time import Time
+    runtime_minutes = (Time.now().mjd - last_run.mjd_run) * 24 * 60
+    
+    # Estimate progress based on runtime and typical processing times
+    # This is approximate since we don't have real-time progress tracking
+    estimated_completion_minutes = 5.0  # Rough estimate
+    progress_percentage = min(95, (runtime_minutes / estimated_completion_minutes) * 100)
+    
+    return {
+        "status": "running",
+        "runtime_minutes": runtime_minutes,
+        "progress_percentage": progress_percentage,
+        "lookback_days": last_run.lookback_days,
+        "total_objects_in_db": total_objects_in_db,
+        "is_automatic": getattr(last_run, 'is_automatic', True),
+        "estimated_steps": [
+            "🔍 Testing Antares API connectivity",
+            "📡 Querying Antares for recent objects", 
+            "🧮 Processing light curves and extracting features",
+            "💾 Saving features to database",
+            "🤖 Running automated classifiers",
+            "✅ Finalizing results"
+        ],
+        "current_step": min(5, int(progress_percentage / 20))  # 0-5 based on progress
+    }
 
 @api_app.get("/extraction-status")
 async def get_extraction_status(
@@ -1575,6 +1820,13 @@ async def get_extraction_status(
             "is_stuck": bool(runtime_hours > 2.0)  # Consider stuck after 2 hours
         }
     
+    # Determine if this was an automatic or manual run (safely handle missing column)
+    try:
+        is_automatic = getattr(last_run, 'is_automatic', True)  # Default to automatic for older runs
+    except AttributeError:
+        # Column doesn't exist yet, default to automatic for existing runs
+        is_automatic = True
+    
     return {
         "status": last_run.status,
         "run_date": last_run.run_date.isoformat() if last_run.run_date else None,
@@ -1584,6 +1836,7 @@ async def get_extraction_status(
         "objects_processed": int(last_run.objects_processed) if last_run.objects_processed is not None else None,
         "processing_time_seconds": float(last_run.processing_time_seconds) if last_run.processing_time_seconds is not None else None,
         "error_message": last_run.error_message,
+        "is_automatic": is_automatic,
         **runtime_info
     }
 

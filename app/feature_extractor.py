@@ -89,14 +89,19 @@ def get_daily_objects(lookback_days: float = 20.0, lookback_t_first: float = 500
         }
         
         logger.info(f"Querying Antares for objects detected between MJD {start_time.mjd:.1f} and {end_time.mjd:.1f}")
-        logger.info(f"Query parameters: {query}")
+        logger.debug(f"Query parameters: {query}")
         
-        results = search(query)  # Remove 'limit' parameter - not supported in newer antares_client
-        
-        # Convert to list first to check if empty
-        results_list = list(results) if results else []
-        
-        logger.info(f"Antares returned {len(results_list)} raw results")
+        try:
+            results = search(query)  # Remove 'limit' parameter - not supported in newer antares_client
+            
+            # Convert to list first to check if empty
+            results_list = list(results) if results else []
+            
+            logger.info(f"Antares returned {len(results_list)} raw results")
+        except Exception as e:
+            logger.error(f"Antares API query failed: {e}")
+            logger.info("This is likely a temporary Antares server issue. Try again later.")
+            return None
         
         if not results_list:
             logger.warning(f"No objects found in Antares query for the last {lookback_days} days")
@@ -566,7 +571,10 @@ def extract_features_for_recent_objects(
         daily_objects = get_daily_objects(lookback_days=actual_lookback, test_mode=test_mode)
         
         if daily_objects is None or len(daily_objects) == 0:
-            logger.warning("No new objects found")
+            if test_mode:
+                logger.info("Test mode active - no objects processed (this is expected)")
+            else:
+                logger.warning("No new objects found from Antares query")
             extraction_run.objects_found = 0
             extraction_run.objects_processed = 0
             extraction_run.status = "completed"
