@@ -35,7 +35,7 @@ def safe_migrate():
             try:
                 result = session.execute(text("SELECT is_automatic FROM feature_extraction_runs LIMIT 1"))
                 print("✅ Column 'is_automatic' already exists. No migration needed.")
-                return
+                return True
             except sqlalchemy.exc.OperationalError as e:
                 if "no such column" in str(e):
                     print("📝 Column 'is_automatic' not found. Adding it now...")
