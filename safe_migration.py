@@ -7,16 +7,21 @@ This uses the app's own database configuration to ensure compatibility.
 import sys
 import os
 
-# Add the app directory to Python path so we can import the database config
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
+# Add the current directory to Python path so we can import the app modules
+sys.path.insert(0, os.path.dirname(__file__))
+
+# Set up the app path
+app_path = os.path.join(os.path.dirname(__file__), 'app')
+if app_path not in sys.path:
+    sys.path.insert(0, app_path)
 
 def safe_migrate():
     """Safely add is_automatic column using app's database configuration."""
     
     try:
-        # Import the app's database configuration
-        from database import engine, SessionLocal
-        from models import FeatureExtractionRun
+        # Import the app's database configuration  
+        from app.database import engine, SessionLocal
+        from app.models import FeatureExtractionRun
         import sqlalchemy
         from sqlalchemy import text
         
