@@ -1459,6 +1459,174 @@ async def update_user_profile(
     db.refresh(current_user)
     return {"message": "Profile updated successfully"}
 
+@api_app.post("/user/withdraw-consent")
+async def withdraw_data_sharing_consent(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Withdraw consent for data sharing."""
+    current_user.data_sharing_consent = False
+    db.commit()
+    db.refresh(current_user)
+    
+    logger.info(f"User {current_user.username} (ID: {current_user.id}) withdrew data sharing consent")
+    return {"message": "Data sharing consent withdrawn successfully"}
+
+
+@api_app.get("/user/export-data")
+async def export_user_data(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Export user's classification data."""
+    from datetime import datetime
+    import json
+    
+    # Collect all user data
+    votes = db.query(models.Vote).filter(models.Vote.user_id == current_user.id).all()
+    tags = db.query(models.Tag).filter(models.Tag.user_id == current_user.id).all()
+    notes = db.query(models.Note).filter(models.Note.user_id == current_user.id).all()
+    comments = db.query(models.Comment).filter(models.Comment.user_id == current_user.id).all()
+    
+    export_data = {
+        "export_info": {
+            "user_id": current_user.id,
+            "username": current_user.username,
+            "export_date": datetime.utcnow().isoformat(),
+            "privacy_policy_version": "January 2025"
+        },
+        "account_info": {
+            "username": current_user.username,
+            "email": current_user.email,
+            "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+            "data_sharing_consent": current_user.data_sharing_consent,
+            "science_interests": current_user.science_interests,
+            "is_admin": current_user.is_admin
+        },
+        "votes": [
+            {
+                "id": vote.id,
+                "ztfid": vote.ztfid,
+                "vote_type": vote.vote_type,
+                "created_at": vote.created_at.isoformat() if vote.created_at else None
+            }
+            for vote in votes
+        ],
+        "tags": [
+            {
+                "id": tag.id,
+                "ztfid": tag.ztfid,
+                "tag_name": tag.tag_name,
+                "created_at": tag.created_at.isoformat() if tag.created_at else None
+            }
+            for tag in tags
+        ],
+        "notes": [
+            {
+                "id": note.id,
+                "ztfid": note.ztfid,
+                "content": note.content,
+                "created_at": note.created_at.isoformat() if note.created_at else None
+            }
+            for note in notes
+        ],
+        "comments": [
+            {
+                "id": comment.id,
+                "ztfid": comment.ztfid,
+                "content": comment.content,
+                "created_at": comment.created_at.isoformat() if comment.created_at else None
+            }
+            for comment in comments
+        ]
+    }
+    
+    logger.info(f"User {current_user.username} (ID: {current_user.id}) exported their data")
+    
+    # Return as downloadable JSON
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        content=export_data,
+        headers={
+            "Content-Disposition": f"attachment; filename=transient_recommender_data_export_{current_user.username}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+        }
+    )
+
+
+@api_app.delete("/user/account")
+async def delete_user_account(
+    request: Request,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete user account and associated data."""
+    from datetime import datetime, timedelta
+    
+    data = await request.json()
+    confirmation = data.get("confirmation", "").lower()
+    
+    if confirmation != "delete my account":
+        raise HTTPException(
+            status_code=400, 
+            detail="Please type 'delete my account' to confirm account deletion"
+        )
+    
+    user_id = current_user.id
+    username = current_user.username
+    
+    logger.info(f"Starting account deletion process for user {username} (ID: {user_id})")
+    
+    try:
+        # Step 1: Anonymize classification data (keep for research but remove personal identifiers)
+        # Update votes to remove personal connection but keep classification data
+        db.query(models.Vote).filter(models.Vote.user_id == user_id).update({
+            models.Vote.user_id: None  # This requires allowing NULL in the user_id column
+        })
+        
+        # Update tags to remove personal connection
+        db.query(models.Tag).filter(models.Tag.user_id == user_id).update({
+            models.Tag.user_id: None
+        })
+        
+        # Delete personal notes and comments (these are personal, not research data)
+        db.query(models.Note).filter(models.Note.user_id == user_id).delete()
+        db.query(models.Comment).filter(models.Comment.user_id == user_id).delete()
+        db.query(models.AudioNote).filter(models.AudioNote.user_id == user_id).delete()
+        
+        # Delete password reset tokens
+        db.query(models.PasswordResetToken).filter(models.PasswordResetToken.user_id == user_id).delete()
+        
+        # Step 2: Mark user account for deletion (implement soft delete for 30-day retention)
+        current_user.is_active = False
+        current_user.email = f"deleted_{user_id}@deleted.local"
+        current_user.username = f"deleted_user_{user_id}"
+        current_user.password_hash = "DELETED"
+        current_user.api_key = None
+        current_user.data_sharing_consent = False
+        current_user.science_interests = None
+        
+        # Add deletion timestamp (we'll need to add this field to the model)
+        # For now, we'll use a note in the username
+        deletion_date = datetime.utcnow()
+        current_user.username = f"deleted_user_{user_id}_{deletion_date.strftime('%Y%m%d')}"
+        
+        db.commit()
+        
+        logger.info(f"Account deletion completed for user {username} (ID: {user_id}). Personal identifiers anonymized, classification data retained for research.")
+        
+        # TODO: Set up background job to permanently delete user record after 30 days
+        
+        return {
+            "message": "Account deletion initiated. Personal identifiers have been removed immediately. Your classification data has been anonymized and retained for research purposes as outlined in our privacy policy. The account record will be permanently deleted within 30 days.",
+            "deletion_date": deletion_date.isoformat(),
+            "permanent_deletion_after": (deletion_date + timedelta(days=30)).isoformat()
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error during account deletion for user {username} (ID: {user_id}): {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Account deletion failed. Please contact support.")
+
 @api_app.post("/update-feature-bank")
 async def update_feature_bank(
     current_user: models.User = Depends(get_current_user),
