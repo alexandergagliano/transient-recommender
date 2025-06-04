@@ -1790,7 +1790,7 @@ async def get_extraction_progress(
         "is_automatic": getattr(last_run, 'is_automatic', True),
         "estimated_steps": [
             "🔍 Testing Antares API connectivity",
-            "📡 Querying Antares for recent objects", 
+            f"📡 Querying Antares (batched by day)", 
             "🧮 Processing light curves and extracting features",
             "💾 Saving features to database",
             "🤖 Running automated classifiers",
@@ -1805,7 +1805,24 @@ async def get_extraction_status(
     db: Session = Depends(get_db)
 ):
     """Get the status of the last feature extraction run."""
-    last_run = get_last_extraction_run(db)
+    try:
+        last_run = get_last_extraction_run(db)
+    except Exception as e:
+        logger.error(f"Error getting last extraction run: {e}")
+        # Return a safe default response if database query fails
+        return {
+            "status": "unknown",
+            "run_date": None,
+            "mjd_run": None,
+            "lookback_days": 20.0,
+            "objects_found": 0,
+            "objects_processed": 0,
+            "processing_time_seconds": None,
+            "error_message": "Database error - migration may be required",
+            "is_automatic": True,
+            "runtime_hours": 0,
+            "is_stuck": False
+        }
     
     if not last_run:
         return {"status": "never_run"}
@@ -1823,7 +1840,7 @@ async def get_extraction_status(
     # Determine if this was an automatic or manual run (safely handle missing column)
     try:
         is_automatic = getattr(last_run, 'is_automatic', True)  # Default to automatic for older runs
-    except AttributeError:
+    except (AttributeError, Exception):
         # Column doesn't exist yet, default to automatic for existing runs
         is_automatic = True
     
@@ -2979,6 +2996,70 @@ def run_background_feature_extraction():
     except Exception as e:
         logger.error(f"Error in background feature extraction check: {e}", exc_info=True)
 
+def schedule_daily_extraction():
+    """Schedule daily feature extraction at 1 AM using threading timer."""
+    import threading
+    import time
+    from datetime import datetime, timedelta
+    
+    def daily_extraction_worker():
+        """Worker that runs daily extraction and reschedules itself."""
+        logger.info("Daily extraction scheduler started")
+        
+        while True:
+            try:
+                # Calculate seconds until next 1 AM
+                now = datetime.now()
+                next_1am = (now + timedelta(days=1)).replace(hour=1, minute=0, second=0, microsecond=0)
+                
+                # If it's already past 1 AM today, schedule for 1 AM tomorrow
+                if now.hour >= 1:
+                    next_1am = next_1am
+                else:
+                    # If it's before 1 AM today, schedule for 1 AM today
+                    next_1am = now.replace(hour=1, minute=0, second=0, microsecond=0)
+                
+                sleep_seconds = (next_1am - now).total_seconds()
+                
+                logger.info(f"Next automatic daily extraction scheduled for {next_1am.strftime('%Y-%m-%d %H:%M:%S')} ({sleep_seconds/3600:.1f} hours)")
+                
+                # Sleep until 1 AM
+                time.sleep(sleep_seconds)
+                
+                # Run the extraction with daily lookback to keep queries small
+                logger.info("🕐 Starting scheduled daily feature extraction (1 day lookback)")
+                
+                # Run daily extraction with 1.5 day lookback for small queries
+                from app.feature_extractor import get_last_extraction_run
+                
+                with SessionLocal() as daily_db:
+                    last_run = get_last_extraction_run(daily_db)
+                    
+                    # Only run if no extraction in last 23 hours (allow slight overlap)
+                    if last_run and last_run.status == "running":
+                        logger.info("Feature extraction already running, skipping daily extraction")
+                        continue
+                    
+                    if last_run and last_run.run_date:
+                        from astropy.time import Time
+                        hours_since_last = (Time.now().mjd - last_run.mjd_run) * 24
+                        if hours_since_last < 23:
+                            logger.info(f"Last extraction was {hours_since_last:.1f} hours ago, skipping daily extraction")
+                            continue
+                    
+                    logger.info("Starting daily feature extraction with 1.5 day lookback...")
+                    run_feature_extraction_manual(lookback_days=1.5, force_reprocess=False)
+                
+            except Exception as e:
+                logger.error(f"Daily extraction scheduler error: {e}")
+                # On error, wait 1 hour before trying again
+                time.sleep(3600)
+    
+    # Start the daily worker in a daemon thread
+    worker_thread = threading.Thread(target=daily_extraction_worker, daemon=True)
+    worker_thread.start()
+    logger.info("✅ Daily extraction scheduler started - will run at 1 AM daily")
+
 # Add startup event - lightweight startup only
 @app.on_event("startup")
 async def startup_event():
@@ -3005,7 +3086,7 @@ async def startup_event():
     # Schedule feature extraction as background task instead of blocking startup
     try:
         import threading
-        # Run feature extraction in background thread after 5 second delay
+        # Run immediate feature extraction in background thread after 5 second delay
         def delayed_extraction():
             import time
             time.sleep(5)  # Allow server to fully start
@@ -3013,6 +3094,10 @@ async def startup_event():
         
         bg_thread = threading.Thread(target=delayed_extraction, daemon=True)
         bg_thread.start()
+        
+        # Also start the daily scheduler for automatic daily extractions
+        schedule_daily_extraction()
+        
     except Exception as e:
         logger.error(f"Error scheduling background feature extraction: {e}", exc_info=True)
 

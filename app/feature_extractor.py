@@ -59,69 +59,90 @@ def get_daily_objects(lookback_days: float = 20.0, lookback_t_first: float = 500
         end_time = Time.now()
         start_time = end_time - lookback_days * u.day
         
-        # Search for objects with recent detections
-        query = {
-            'query': {
-                'bool': {
-                    'must': [
-                        {
-                            'range': {
-                                'properties.newest_alert_observation_time': {
-                                    'gte': start_time.mjd,
-                                    'lte': end_time.mjd
-                                }
-                            }
-                        },
-                        {
-                            'range': {
-                                'properties.ztf_object_id': {
-                                    'gte': 'ZTF18',  # Only ZTF objects
-                                    'lte': 'ZTF99'
-                                }
-                            }
-                        }
-                    ]
-                }
-            },
-            'sort': [
-                {'properties.newest_alert_observation_time': {'order': 'desc'}}
-            ]
-        }
-        
         logger.info(f"Querying Antares for objects detected between MJD {start_time.mjd:.1f} and {end_time.mjd:.1f}")
-        logger.debug(f"Query parameters: {query}")
+        logger.info(f"Using batched queries to avoid timeouts (batch size: 1 day)")
         
-        try:
-            import signal
+        # Break into daily batches to avoid timeouts and memory issues
+        batch_size_days = 1.0  # Query 1 day at a time
+        total_results = []
+        
+        current_end = end_time
+        batch_count = 0
+        
+        while current_end.mjd > start_time.mjd:
+            batch_count += 1
+            current_start = max(current_end - batch_size_days * u.day, start_time)
             
-            def timeout_handler(signum, frame):
-                raise TimeoutError("Antares query timed out after 60 seconds")
+            # Create query for this batch
+            batch_query = {
+                'query': {
+                    'bool': {
+                        'must': [
+                            {
+                                'range': {
+                                    'properties.newest_alert_observation_time': {
+                                        'gte': current_start.mjd,
+                                        'lte': current_end.mjd
+                                    }
+                                }
+                            },
+                            {
+                                'range': {
+                                    'properties.ztf_object_id': {
+                                        'gte': 'ZTF18',  # Only ZTF objects
+                                        'lte': 'ZTF99'
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                },
+                'sort': [
+                    {'properties.newest_alert_observation_time': {'order': 'desc'}}
+                ]
+            }
             
-            # Set up timeout for the query
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(60)  # 60 second timeout
+            logger.info(f"Batch {batch_count}: Querying MJD {current_start.mjd:.1f} to {current_end.mjd:.1f}")
             
             try:
-                logger.info("Starting Antares API query (60s timeout)...")
-                results = search(query)  # Remove 'limit' parameter - not supported in newer antares_client
+                import signal
                 
-                # Convert to list first to check if empty
-                logger.info("Converting Antares results to list...")
-                results_list = list(results) if results else []
+                def timeout_handler(signum, frame):
+                    raise TimeoutError(f"Antares batch query {batch_count} timed out after 30 seconds")
                 
-                logger.info(f"Antares returned {len(results_list)} raw results")
-            finally:
-                # Cancel the alarm
-                signal.alarm(0)
+                # Set up timeout for each batch (shorter since it's smaller)
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(30)  # 30 second timeout per batch
                 
-        except TimeoutError as e:
-            logger.error(f"Antares query timed out: {e}")
-            logger.info("Antares server may be slow or unresponsive. Try again later.")
-            return None
-        except Exception as e:
-            logger.error(f"Antares API query failed: {e}")
-            logger.info("This is likely a temporary Antares server issue. Try again later.")
-            return None
+                try:
+                    batch_results = search(batch_query)
+                    batch_list = list(batch_results) if batch_results else []
+                    
+                    logger.info(f"Batch {batch_count}: Found {len(batch_list)} objects")
+                    total_results.extend(batch_list)
+                    
+                finally:
+                    # Cancel the alarm
+                    signal.alarm(0)
+                    
+            except TimeoutError as e:
+                logger.error(f"Batch {batch_count} timed out: {e}")
+                logger.warning(f"Skipping batch {batch_count} due to timeout")
+                continue
+            except Exception as e:
+                logger.error(f"Batch {batch_count} failed: {e}")
+                logger.warning(f"Skipping batch {batch_count} due to error")
+                continue
+            
+            # Move to next batch
+            current_end = current_start
+            
+            # Small delay between batches to be nice to Antares
+            import time
+            time.sleep(0.5)
+        
+        results_list = total_results
+        logger.info(f"Completed batched query: {len(results_list)} total objects from {batch_count} batches")
         
         if not results_list:
             logger.warning(f"No objects found in Antares query for the last {lookback_days} days")
