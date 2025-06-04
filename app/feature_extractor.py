@@ -92,12 +92,32 @@ def get_daily_objects(lookback_days: float = 20.0, lookback_t_first: float = 500
         logger.debug(f"Query parameters: {query}")
         
         try:
-            results = search(query)  # Remove 'limit' parameter - not supported in newer antares_client
+            import signal
             
-            # Convert to list first to check if empty
-            results_list = list(results) if results else []
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Antares query timed out after 60 seconds")
             
-            logger.info(f"Antares returned {len(results_list)} raw results")
+            # Set up timeout for the query
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(60)  # 60 second timeout
+            
+            try:
+                logger.info("Starting Antares API query (60s timeout)...")
+                results = search(query)  # Remove 'limit' parameter - not supported in newer antares_client
+                
+                # Convert to list first to check if empty
+                logger.info("Converting Antares results to list...")
+                results_list = list(results) if results else []
+                
+                logger.info(f"Antares returned {len(results_list)} raw results")
+            finally:
+                # Cancel the alarm
+                signal.alarm(0)
+                
+        except TimeoutError as e:
+            logger.error(f"Antares query timed out: {e}")
+            logger.info("Antares server may be slow or unresponsive. Try again later.")
+            return None
         except Exception as e:
             logger.error(f"Antares API query failed: {e}")
             logger.info("This is likely a temporary Antares server issue. Try again later.")
