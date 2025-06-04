@@ -185,6 +185,10 @@ async def home(request: Request, current_user: models.User = Depends(get_current
     """Home page."""
     return templates.TemplateResponse("index.html", {"request": request, "current_user": current_user})
 
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_page(request: Request, current_user: models.User = Depends(get_current_user_optional)):
+    """Privacy policy page."""
+    return templates.TemplateResponse("privacy.html", {"request": request, "current_user": current_user})
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
