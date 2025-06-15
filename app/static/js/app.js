@@ -1430,8 +1430,15 @@ function updateObjectDisplay() {
         return;
     }
 
-    // Update object info
-    objectId.textContent = ztfid;
+    // Update object info with explanation
+    objectId.innerHTML = `
+        <div class="d-flex flex-column">
+            <div>${ztfid}</div>
+            <small class="text-muted mt-1">
+                <i class="fas fa-info-circle"></i> ${object.explanation || 'Recommended based on its features'}
+            </small>
+        </div>
+    `;
     objectDetails.textContent = `RA: ${object.ra?.toFixed(4) || 'N/A'}, Dec: ${object.dec?.toFixed(4) || 'N/A'}`;
 
     // Update iframe with ALeRCE link (with CORS-friendly attributes)

@@ -1520,4 +1520,36 @@ button, .btn {
 [data-theme="dark"] .classifier-badge.border-primary {
     background: rgba(13, 110, 253, 0.2);
     border-color: #0d6efd;
+}
+
+/* Recommendation explanation styles */
+#currentObjectId {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--bs-primary);
+}
+
+#currentObjectId small {
+    font-size: 0.875rem;
+    font-weight: normal;
+    color: var(--bs-secondary);
+    opacity: 0.9;
+    line-height: 1.4;
+}
+
+#currentObjectId i {
+    margin-right: 0.25rem;
+    color: var(--bs-info);
+}
+
+[data-theme="dark"] #currentObjectId {
+    color: var(--bs-primary-light);
+}
+
+[data-theme="dark"] #currentObjectId small {
+    color: var(--bs-secondary-light);
+}
+
+[data-theme="dark"] #currentObjectId i {
+    color: var(--bs-info-light);
 } 

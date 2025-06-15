@@ -345,6 +345,84 @@ class WebRecommender:
             models.Vote.vote_type.in_(["like", "target"])
         ).order_by(desc(models.Vote.last_updated)).all()
     
+    def generate_recommendation_explanation(self, db: Session, ztfid: str, user_id: int, science_case: str) -> str:
+        """
+        Generate a personalized explanation for why an object was recommended.
+        
+        Args:
+            db: Database session
+            ztfid: ZTF ID of the recommended object
+            user_id: User ID to personalize the explanation
+            science_case: Current science case being recommended for
+            
+        Returns:
+            A string explaining why this object was recommended
+        """
+        try:
+            # Get the recommended object's features
+            obj_idx = np.where(self.processed_features['ztfids'] == ztfid)[0]
+            if len(obj_idx) == 0:
+                return "Recommended based on its features"
+            
+            obj_features = self.processed_features['X_scaled'][obj_idx[0]]
+            
+            # Get user's liked objects
+            liked_votes = db.query(models.Vote).filter(
+                models.Vote.user_id == user_id,
+                models.Vote.vote_type.in_(["like", "target"])
+            ).all()
+            
+            # Get other users' likes for this object in the same science case
+            other_users_likes = db.query(models.Vote).filter(
+                models.Vote.ztfid == ztfid,
+                models.Vote.user_id != user_id,  # Exclude current user
+                models.Vote.vote_type.in_(["like", "target"]),
+                models.Vote.science_case == science_case
+            ).all()
+            
+            if not liked_votes:
+                if other_users_likes:
+                    # Other users liked this object in the same science case
+                    return f"Recommended because it was liked by others interested in {science_case} objects"
+                
+                # No user history - use science case seeds
+                for seed_ztf in SCIENCE_SEEDS.get(science_case, []):
+                    seed_idx = np.where(self.processed_features['ztfids'] == seed_ztf)[0]
+                    if len(seed_idx) > 0:
+                        return f"Recommended because it's similar to known {science_case} objects"
+                return f"Recommended for {science_case} science case"
+            
+            # Find nearest liked object
+            min_dist = float('inf')
+            nearest_ztfid = None
+            nearest_science_case = None
+            
+            for vote in liked_votes:
+                vote_idx = np.where(self.processed_features['ztfids'] == vote.ztfid)[0]
+                if len(vote_idx) > 0:
+                    vote_features = self.processed_features['X_scaled'][vote_idx[0]]
+                    dist = np.linalg.norm(obj_features - vote_features)
+                    if dist < min_dist:
+                        min_dist = dist
+                        nearest_ztfid = vote.ztfid
+                        nearest_science_case = vote.science_case
+            
+            if nearest_ztfid:
+                if nearest_science_case == science_case:
+                    return f"Recommended because you liked {nearest_ztfid}"
+                else:
+                    return f"Recommended because you liked {nearest_ztfid} (a {nearest_science_case} object)"
+            
+            # If no personal likes match but others liked this object
+            if other_users_likes:
+                return f"Recommended because it was liked by others interested in {science_case} objects"
+            
+            return f"Recommended for {science_case} science case"
+            
+        except Exception as e:
+            logger.error(f"Error generating recommendation explanation: {e}")
+            return f"Recommended for {science_case} science case"
+    
     def get_recommendations(self, db: Session, user_id: int, k: int = 10, science_case: str = "snia-like",
                             obs_telescope: Optional[str] = None, 
                             obs_days: Optional[int] = None, 
@@ -711,94 +789,23 @@ class WebRecommender:
         # Get top k recommendations
         top_k_indices = np.argsort(final_scores)[-k:][::-1]
         
+        # Prepare recommendations with explanations
         recommendations = []
-        
-        # If start_ztfid was specified and found, ensure it's first in the results
-        start_ztfid_index = None
-        if start_ztfid:
-            # For history page use case, we want to show the exact object even if voted on
-            # So check in the full feature bank, not just available objects
-            start_ztfid_full_idx = np.where(ztfids == start_ztfid)[0]
-            if len(start_ztfid_full_idx) > 0:
-                # Check if it's in the available objects
-                start_ztfid_available_idx = np.where(ztfids_available == start_ztfid)[0]
-                if len(start_ztfid_available_idx) > 0:
-                    start_ztfid_index = start_ztfid_available_idx[0]
-                    logger.info(f"Putting start_ztfid {start_ztfid} first in results (from available objects)")
-                else:
-                    # Object was voted on, but we still want to show it for history
-                    logger.info(f"start_ztfid {start_ztfid} was voted on, but showing it anyway for history")
-                    # We'll handle this case separately below
-        
-        # Add start_ztfid first if found in available objects
-        processed_indices = set()
-        if start_ztfid_index is not None:
-            ztfid = ztfids_available[start_ztfid_index]
-            obj_row = self.sampled_feature_bank[self.sampled_feature_bank['ZTFID'] == ztfid].iloc[0]
-            obj_data = obj_row.to_dict()
-            
-            # Log coordinates for debugging
-            ra = obj_data.get('ra')
-            dec = obj_data.get('dec')
-            ra_str = f"{ra:.4f}" if ra is not None else "N/A"
-            dec_str = f"{dec:.4f}" if dec is not None else "N/A"
-            logger.info(f"First object (exact match): {ztfid}: RA={ra_str}, Dec={dec_str}")
-            
-            # Clean up data for JSON serialization
-            for key, value in obj_data.items():
-                if isinstance(value, (float, np.floating)):
-                    obj_data[key] = float(value) if pd.notna(value) and np.isfinite(value) else None
-                elif isinstance(value, np.integer):
-                    obj_data[key] = int(value)
-            
-            recommendations.append(obj_data)
-            processed_indices.add(start_ztfid_index)
-        elif start_ztfid and start_ztfid in ztfids:
-            # Handle case where start_ztfid was voted on but we still want to show it
-            logger.info(f"Adding start_ztfid {start_ztfid} even though it was voted on")
-            obj_row = self.sampled_feature_bank[self.sampled_feature_bank['ZTFID'] == start_ztfid].iloc[0]
-            obj_data = obj_row.to_dict()
-            
-            # Log coordinates for debugging
-            ra = obj_data.get('ra')
-            dec = obj_data.get('dec')
-            ra_str = f"{ra:.4f}" if ra is not None else "N/A"
-            dec_str = f"{dec:.4f}" if dec is not None else "N/A"
-            logger.info(f"First object (voted on): {start_ztfid}: RA={ra_str}, Dec={dec_str}")
-            
-            # Clean up data for JSON serialization
-            for key, value in obj_data.items():
-                if isinstance(value, (float, np.floating)):
-                    obj_data[key] = float(value) if pd.notna(value) and np.isfinite(value) else None
-                elif isinstance(value, np.integer):
-                    obj_data[key] = int(value)
-            
-            recommendations.append(obj_data)
-        
-        # Add the rest of the recommendations (excluding the start_ztfid if already added)
         for idx in top_k_indices:
-            if idx not in processed_indices and len(recommendations) < k:
-                ztfid = ztfids_available[idx]
-                
-                # Get object data from sampled feature bank
-                obj_row = self.sampled_feature_bank[self.sampled_feature_bank['ZTFID'] == ztfid].iloc[0]
-                obj_data = obj_row.to_dict()
-                
-                # Log coordinates for debugging
-                ra = obj_data.get('ra')
-                dec = obj_data.get('dec')
-                ra_str = f"{ra:.4f}" if ra is not None else "N/A"
-                dec_str = f"{dec:.4f}" if dec is not None else "N/A"
-                logger.info(f"Recommended {ztfid}: RA={ra_str}, Dec={dec_str}")
-                
-                # Clean up data for JSON serialization
-                for key, value in obj_data.items():
-                    if isinstance(value, (float, np.floating)):
-                        obj_data[key] = float(value) if pd.notna(value) and np.isfinite(value) else None
-                    elif isinstance(value, np.integer):
-                        obj_data[key] = int(value)
-                
-                recommendations.append(obj_data)
+            ztfid = ztfids_available[idx]
+            score = final_scores[idx]
+            
+            # Get explanation for this recommendation
+            explanation = self.generate_recommendation_explanation(db, ztfid, user_id, science_case)
+            
+            recommendations.append({
+                'ztfid': ztfid,
+                'score': float(score),
+                'explanation': explanation,
+                'ra': float(self.sampled_feature_bank.loc[self.sampled_feature_bank['ZTFID'] == ztfid, 'ra'].iloc[0]),
+                'dec': float(self.sampled_feature_bank.loc[self.sampled_feature_bank['ZTFID'] == ztfid, 'dec'].iloc[0]),
+                'latest_magnitude': float(self.sampled_feature_bank.loc[self.sampled_feature_bank['ZTFID'] == ztfid, 'latest_magnitude'].iloc[0])
+            })
         
         total_time = time.time() - start_time
         logger.info(f"Generated {len(recommendations)} recommendations in {total_time:.2f} seconds (query: {query_ztfid})")
@@ -809,6 +816,6 @@ class WebRecommender:
             dec_val = rec.get('dec')
             ra_str = f"{ra_val:.4f}" if ra_val is not None else "N/A"
             dec_str = f"{dec_val:.4f}" if dec_val is not None else "N/A"
-            logger.info(f"Recommendation {i}: {rec['ZTFID']} (RA={ra_str}, Dec={dec_str})")
+            logger.info(f"Recommendation {i}: {rec['ztfid']} (RA={ra_str}, Dec={dec_str})")
         
         return recommendations 
