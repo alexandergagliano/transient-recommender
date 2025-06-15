@@ -109,15 +109,17 @@ class WebRecommender:
         
         logger.info(f"Processing features for {len(self.feature_bank)} objects")
         
-        # Sample if too large for performance and store the sampled version
-        feature_bank_to_process = self.feature_bank
-        if len(self.feature_bank) > self.max_sample_size:
-            logger.info(f"Sampling {self.max_sample_size} objects from {len(self.feature_bank)} for performance")
-            if not hasattr(self, 'sampled_feature_bank') or self.sampled_feature_bank is None:
+        # Use existing sampled feature bank if available, otherwise sample
+        if not hasattr(self, 'sampled_feature_bank') or self.sampled_feature_bank is None:
+            if len(self.feature_bank) > self.max_sample_size:
+                logger.info(f"Sampling {self.max_sample_size} objects from {len(self.feature_bank)} for performance")
                 self.sampled_feature_bank = self.feature_bank.sample(n=self.max_sample_size, random_state=42)
-            feature_bank_to_process = self.sampled_feature_bank
-        elif not hasattr(self, 'sampled_feature_bank') or self.sampled_feature_bank is None:
-            self.sampled_feature_bank = self.feature_bank
+            else:
+                logger.info("Using full feature bank (no sampling needed)")
+                self.sampled_feature_bank = self.feature_bank
+        
+        # Use sampled feature bank for processing
+        feature_bank_to_process = self.sampled_feature_bank
         
         # Check which BASE_FEATURES are available in the DataFrame
         available_features = [f for f in BASE_FEATURES if f in feature_bank_to_process.columns]

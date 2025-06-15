@@ -3253,6 +3253,16 @@ async def startup_event():
         recommender_engine.feature_bank = recommender_engine.get_feature_bank_from_db(db)
         logger.info(f"Loaded {len(recommender_engine.feature_bank)} objects into recommender feature bank")
         
+        # Initialize sampled feature bank
+        if len(recommender_engine.feature_bank) > recommender_engine.max_sample_size:
+            logger.info(f"Sampling {recommender_engine.max_sample_size} objects from {len(recommender_engine.feature_bank)} for performance")
+            recommender_engine.sampled_feature_bank = recommender_engine.feature_bank.sample(n=recommender_engine.max_sample_size, random_state=42)
+        else:
+            logger.info("Using full feature bank (no sampling needed)")
+            recommender_engine.sampled_feature_bank = recommender_engine.feature_bank
+        
+        logger.info(f"Initialized sampled feature bank with {len(recommender_engine.sampled_feature_bank)} objects")
+        
         # Process the loaded features (quick operation)
         recommender_engine._load_and_process_features(force_reload=True)
         if recommender_engine.processed_features:
