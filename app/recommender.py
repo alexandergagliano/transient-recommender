@@ -113,10 +113,11 @@ class WebRecommender:
         feature_bank_to_process = self.feature_bank
         if len(self.feature_bank) > self.max_sample_size:
             logger.info(f"Sampling {self.max_sample_size} objects from {len(self.feature_bank)} for performance")
-            feature_bank_to_process = self.feature_bank.sample(n=self.max_sample_size, random_state=42)
-        
-        # Store the sampled feature bank for consistent use
-        self.sampled_feature_bank = feature_bank_to_process
+            if not hasattr(self, 'sampled_feature_bank') or self.sampled_feature_bank is None:
+                self.sampled_feature_bank = self.feature_bank.sample(n=self.max_sample_size, random_state=42)
+            feature_bank_to_process = self.sampled_feature_bank
+        elif not hasattr(self, 'sampled_feature_bank') or self.sampled_feature_bank is None:
+            self.sampled_feature_bank = self.feature_bank
         
         # Check which BASE_FEATURES are available in the DataFrame
         available_features = [f for f in BASE_FEATURES if f in feature_bank_to_process.columns]
@@ -442,10 +443,12 @@ class WebRecommender:
                 logger.error("No feature bank available")
                 return []
             
-            # Sample for performance if needed
+            # Sample for performance if needed and store the sampled version
             if len(self.feature_bank) > self.max_sample_size:
                 logger.info(f"Sampling {self.max_sample_size} objects from {len(self.feature_bank)} for performance")
-                self.feature_bank = self.feature_bank.sample(n=self.max_sample_size, random_state=42)
+                self.sampled_feature_bank = self.feature_bank.sample(n=self.max_sample_size, random_state=42)
+            else:
+                self.sampled_feature_bank = self.feature_bank
             
             # Process features if not already done
             if not hasattr(self, 'processed_features') or self.processed_features is None:
