@@ -1679,14 +1679,18 @@ def run_feature_extraction_manual(lookback_days: float, force_reprocess: bool):
                             {
                                 'range': {
                                     'properties.ztf_object_id': {
-                                        'gte': 'ZTF18',  # Only ZTF objects
+                                        'gte': 'ZTF18',  # All ZTF objects
                                         'lte': 'ZTF99'
                                     }
                                 }
                             }
                         ]
                     }
-                }
+                },
+                'sort': [
+                    {'properties.newest_alert_observation_time': {'order': 'desc'}}
+                ],
+                'size': 10  # Small test size
             }
             
             # Try the test query with timeout
@@ -1768,14 +1772,18 @@ def run_feature_extraction_background(lookback_days: float, force_reprocess: boo
                             {
                                 'range': {
                                     'properties.ztf_object_id': {
-                                        'gte': 'ZTF18',  # Only ZTF objects
+                                        'gte': 'ZTF18',  # All ZTF objects
                                         'lte': 'ZTF99'
                                     }
                                 }
                             }
                         ]
                     }
-                }
+                },
+                'sort': [
+                    {'properties.newest_alert_observation_time': {'order': 'desc'}}
+                ],
+                'size': 10  # Small test size
             }
             
             # Try the test query with timeout
@@ -3241,6 +3249,7 @@ async def startup_event():
     # Load recommender feature bank (quick operation)
     try:
         db = next(get_db())
+        logger.info("Loading feature bank from database...")
         recommender_engine.feature_bank = recommender_engine.get_feature_bank_from_db(db)
         logger.info(f"Loaded {len(recommender_engine.feature_bank)} objects into recommender feature bank")
         
