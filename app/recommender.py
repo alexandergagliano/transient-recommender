@@ -803,14 +803,45 @@ class WebRecommender:
                 # Get explanation for this recommendation
                 explanation = self.generate_recommendation_explanation(db, ztfid, user_id, science_case)
                 
-                recommendations.append({
-                    'ztfid': ztfid,
-                    'score': float(score),
-                    'explanation': explanation,
-                    'ra': float(self.sampled_feature_bank.loc[self.sampled_feature_bank['ZTFID'] == ztfid, 'ra'].iloc[0]),
-                    'dec': float(self.sampled_feature_bank.loc[self.sampled_feature_bank['ZTFID'] == ztfid, 'dec'].iloc[0]),
-                    'latest_magnitude': float(self.sampled_feature_bank.loc[self.sampled_feature_bank['ZTFID'] == ztfid, 'latest_magnitude'].iloc[0])
-                })
+                # Get object details with defensive checks
+                try:
+                    obj_row = self.sampled_feature_bank.loc[self.sampled_feature_bank['ZTFID'] == ztfid]
+                    if len(obj_row) == 0:
+                        logger.error(f"Object {ztfid} not found in sampled_feature_bank")
+                        continue
+                    
+                    row = obj_row.iloc[0]
+                    
+                    # Get RA/Dec with defensive checks
+                    ra = row.get('ra')
+                    dec = row.get('dec')
+                    latest_magnitude = row.get('latest_magnitude')
+                    
+                    # Convert to float and handle NaN/None values
+                    ra = float(ra) if ra is not None and not pd.isna(ra) else None
+                    dec = float(dec) if dec is not None and not pd.isna(dec) else None
+                    latest_magnitude = float(latest_magnitude) if latest_magnitude is not None and not pd.isna(latest_magnitude) else None
+                    
+                    recommendations.append({
+                        'ztfid': ztfid,
+                        'score': float(score),
+                        'explanation': explanation,
+                        'ra': ra,
+                        'dec': dec,
+                        'latest_magnitude': latest_magnitude
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error getting details for object {ztfid}: {e}")
+                    # Still include the object but with minimal details
+                    recommendations.append({
+                        'ztfid': ztfid,
+                        'score': float(score),
+                        'explanation': explanation,
+                        'ra': None,
+                        'dec': None,
+                        'latest_magnitude': None
+                    })
             
             total_time = time.time() - start_time
             logger.info(f"Generated {len(recommendations)} recommendations in {total_time:.2f} seconds (query: {query_ztfid})")
