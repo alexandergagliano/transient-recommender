@@ -1435,7 +1435,7 @@ function updateObjectDisplay() {
         <div class="d-flex flex-column">
             <div>${ztfid}</div>
             <small class="text-muted mt-1">
-                <i class="fas fa-info-circle"></i> ${object.explanation || 'Recommended based on its features'}
+                <i class="fas fa-info-circle"></i> <em>${object.explanation || 'Recommended based on its features'}</em>
             </small>
         </div>
     `;
