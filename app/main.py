@@ -4,7 +4,7 @@ from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Request,
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, PlainTextResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
@@ -17,12 +17,38 @@ from pathlib import Path
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import io # For pydub
+import pandas as pd
 from pydantic import BaseModel
 
 import speech_recognition as sr # For speech-to-text
 from pydub import AudioSegment # For audio conversion
 import smtplib
 import secrets
+
+# Additional imports previously scattered throughout the file
+import subprocess
+import asyncio
+import time
+import zipfile
+import tempfile
+import shutil
+import requests
+import csv
+import yaml
+import threading
+import uvicorn
+
+# Optional imports with error handling
+try:
+    import antares_client
+    from antares_client.search import search
+    from astropy.time import Time
+    from astropy import units as u
+except ImportError:
+    antares_client = None
+    search = None
+    Time = None
+    u = None
 
 # Email imports - the correct class names are MIMEText and MIMEMultipart
 try:
@@ -1206,14 +1232,6 @@ async def generate_finders(
     db: Session = Depends(get_db)
 ):
     """Generate finder charts for all targets and return as zip download."""
-    import subprocess
-    from pathlib import Path
-    import os
-    import asyncio
-    import time
-    import zipfile
-    import tempfile
-    from fastapi.responses import FileResponse
     
     logger.info(f"Generate finders called by user: {current_user.username}")
     
@@ -1370,7 +1388,6 @@ async def generate_finders(
             permanent_zip_dir.mkdir(exist_ok=True)
             permanent_zip_path = permanent_zip_dir / zip_filename
             
-            import shutil
             shutil.copy2(zip_path, permanent_zip_path)
             
             # Return file response for download
@@ -1507,8 +1524,6 @@ async def export_user_data(
     db: Session = Depends(get_db)
 ):
     """Export user's classification data."""
-    from datetime import datetime
-    import json
     
     # Collect all user data
     votes = db.query(models.Vote).filter(models.Vote.user_id == current_user.id).all()
@@ -1572,7 +1587,6 @@ async def export_user_data(
     logger.info(f"User {current_user.username} (ID: {current_user.id}) exported their data")
     
     # Return as downloadable JSON
-    from fastapi.responses import JSONResponse
     return JSONResponse(
         content=export_data,
         headers={
@@ -1588,7 +1602,6 @@ async def delete_user_account(
     db: Session = Depends(get_db)
 ):
     """Delete user account and associated data."""
-    from datetime import datetime, timedelta
     
     data = await request.json()
     confirmation = data.get("confirmation", "").lower()
@@ -1678,10 +1691,6 @@ def run_feature_extraction_manual(lookback_days: float, force_reprocess: bool):
         # Check if Antares is available and working
         test_mode = True  # Default to test mode
         try:
-            import antares_client
-            from antares_client.search import search
-            from astropy.time import Time
-            from astropy import units as u
             
             # Test if Antares API is actually working with a broader query
             logger.info("Testing Antares API connectivity...")
@@ -1771,10 +1780,6 @@ def run_feature_extraction_background(lookback_days: float, force_reprocess: boo
         # Check if Antares is available and working
         test_mode = True  # Default to test mode
         try:
-            import antares_client
-            from antares_client.search import search
-            from astropy.time import Time
-            from astropy import units as u
             
             # Test if Antares API is actually working with a broader query
             logger.info("Testing Antares API connectivity...")
@@ -2441,14 +2446,6 @@ async def get_spectra(
     db: Session = Depends(get_db)
 ):
     """Get available spectra from WiseREP for a ZTFID using the proven API approach."""
-    import requests
-    import zipfile
-    import io
-    import csv
-    import tempfile
-    import os
-    import json
-    import datetime
     
     logger.info(f"Starting spectrum search for {ztfid} requested by user {current_user.username}")
     
@@ -2712,9 +2709,6 @@ async def get_slack_votes(
     db: Session = Depends(get_db)
 ):
     """Get Slack voting data from GitHub CSV for a ZTFID."""
-    import requests
-    import pandas as pd
-    import io
     
     try:
         # GitHub raw CSV URL - you'll need to update this with your actual URL
@@ -2874,7 +2868,6 @@ async def save_algorithm_config(
                 raise HTTPException(status_code=400, detail=f"Missing required key: {key}")
         
         # Write the configuration to the YAML file
-        import yaml
         config_path = filter_manager.config_path
         
         with open(config_path, 'w') as f:
@@ -3176,8 +3169,7 @@ def run_background_feature_extraction():
         
         # Check if we can import antares_client before attempting extraction
         try:
-            import antares_client
-            antares_available = True
+            antares_available = antares_client is not None
         except ImportError:
             antares_available = False
         
@@ -3202,9 +3194,6 @@ def run_background_feature_extraction():
 
 def schedule_daily_extraction():
     """Schedule daily feature extraction at 1 AM using threading timer."""
-    import threading
-    import time
-    from datetime import datetime, timedelta
     
     def daily_extraction_worker():
         """Worker that runs daily extraction and reschedules itself."""
@@ -3300,10 +3289,8 @@ async def startup_event():
     
     # Schedule feature extraction as background task instead of blocking startup
     try:
-        import threading
         # Run immediate feature extraction in background thread after 5 second delay
         def delayed_extraction():
-            import time
             time.sleep(5)  # Allow server to fully start
             run_background_feature_extraction()
         
@@ -3363,5 +3350,4 @@ async def general_exception_handler(request: Request, exc: Exception):
     return PlainTextResponse("An internal server error occurred.", status_code=500)
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8888) 

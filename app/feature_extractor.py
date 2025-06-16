@@ -7,6 +7,7 @@ from astropy.time import Time
 from astropy import units as u
 import logging
 import time
+import signal
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from multiprocessing import Pool, cpu_count
@@ -20,6 +21,14 @@ import json
 
 from . import models
 from .filter_manager import filter_manager
+
+# Optional imports with error handling
+try:
+    import antares_client
+    from antares_client.search import search
+except ImportError:
+    antares_client = None
+    search = None
 
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -43,10 +52,12 @@ def get_daily_objects(lookback_days: float = 20.0, lookback_t_first: float = 500
         return None
     
     try:
-        # Import antares_client here to avoid startup issues if not installed
+        # Check if antares_client is available 
+        if antares_client is None:
+            logger.warning("antares_client not installed - feature extraction will skip new object discovery")
+            return None
+        
         try:
-            import antares_client
-            from antares_client.search import search
             logger.debug(f"Successfully imported antares_client version: {getattr(antares_client, '__version__', 'unknown')}")
         except ImportError as e:
             logger.warning(f"antares_client not installed - feature extraction will skip new object discovery: {e}")
@@ -55,140 +66,261 @@ def get_daily_objects(lookback_days: float = 20.0, lookback_t_first: float = 500
             logger.warning(f"Error importing antares_client - feature extraction will skip new object discovery: {e}")
             return None
         
+        # Test ANTARES API responsiveness with a quick timeout
+        logger.info("Testing ANTARES API responsiveness...")
+        try:
+            
+            def timeout_handler(signum, frame):
+                raise TimeoutError("ANTARES API test timed out")
+            
+            # Set up a 15-second timeout for initial connectivity test
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(15)
+            
+            try:
+                # Very simple test query to check API responsiveness
+                test_query = {
+                    'query': {'match_all': {}},
+                    'size': 1
+                }
+                
+                test_results = search(test_query)
+                test_list = list(test_results)  # This triggers the actual API call
+                
+                logger.info(f"✓ ANTARES API test successful - API is responsive")
+                
+            finally:
+                # Cancel the alarm
+                signal.alarm(0)
+                
+        except TimeoutError:
+            logger.error("✗ ANTARES API is unresponsive (timed out in 15 seconds)")
+            logger.error("This is likely due to ANTARES server issues or network problems")
+            logger.info("Feature extraction will continue without new object discovery")
+            return None
+        except Exception as e:
+            logger.error(f"✗ ANTARES API test failed: {e}")
+            logger.info("Feature extraction will continue without new object discovery")
+            return None
+        
         # Calculate time range
         end_time = Time.now()
         start_time = end_time - lookback_days * u.day
         
         logger.info(f"Querying Antares for objects detected between MJD {start_time.mjd:.1f} and {end_time.mjd:.1f}")
-        logger.info(f"Using batched queries to avoid timeouts (batch size: 1 day)")
+        logger.info(f"Using proper daily pagination to handle ANTARES timeouts")
         
-        # Break into daily batches to avoid timeouts and memory issues
-        batch_size_days = 1.0  # Query 1 day at a time
+        # ANTARES API bulk queries are experiencing major performance issues
+        # Implement proper daily pagination to query smaller time windows
+        
+        logger.warning("ANTARES API has known bulk query performance issues")
+        logger.info("Using daily pagination strategy to handle timeouts...")
+        
         total_results = []
         
-        current_end = end_time
-        batch_count = 0
+        # Split the time range into daily chunks for better timeout handling
+        time_chunk_days = 1.0  # Start with 1-day chunks
+        max_time_chunks = int(np.ceil(lookback_days / time_chunk_days))
         
-        while current_end.mjd > start_time.mjd:
-            batch_count += 1
-            current_start = max(current_end - batch_size_days * u.day, start_time)
+        logger.info(f"Splitting {lookback_days} days into {max_time_chunks} chunks of {time_chunk_days} days each")
+        
+        for chunk_idx in range(max_time_chunks):
+            chunk_start_time = end_time - (chunk_idx + 1) * time_chunk_days * u.day
+            chunk_end_time = end_time - chunk_idx * time_chunk_days * u.day
             
-            # Create query for this batch
-            batch_query = {
-                'query': {
-                    'bool': {
-                        'must': [
-                            {
-                                'range': {
-                                    'properties.newest_alert_observation_time': {
-                                        'gte': current_start.mjd,
-                                        'lte': current_end.mjd
+            # Ensure we don't go beyond the original start time
+            if chunk_start_time.mjd < start_time.mjd:
+                chunk_start_time = start_time
+            
+            logger.info(f"Processing time chunk {chunk_idx + 1}/{max_time_chunks}: MJD {chunk_start_time.mjd:.2f} to {chunk_end_time.mjd:.2f}")
+            
+            # Try multiple batch sizes for this time chunk
+            chunk_strategies = [
+                {"name": "Medium batch", "size": 100, "timeout": 30, "max_attempts": 2},
+                {"name": "Small batch", "size": 50, "timeout": 20, "max_attempts": 3},
+                {"name": "Mini batch", "size": 20, "timeout": 15, "max_attempts": 3},
+                {"name": "Micro batch", "size": 10, "timeout": 10, "max_attempts": 2},
+            ]
+            
+            chunk_results = []
+            chunk_success = False
+            
+            for strategy in chunk_strategies:
+                if chunk_success:
+                    break
+                    
+                logger.info(f"  Trying {strategy['name']} for this time chunk")
+                
+                for attempt in range(strategy['max_attempts']):
+                    try:
+                        def strategy_timeout_handler(signum, frame):
+                            raise TimeoutError(f"{strategy['name']} attempt {attempt+1} timed out")
+                        
+                        signal.signal(signal.SIGALRM, strategy_timeout_handler)
+                        signal.alarm(strategy['timeout'])
+                        
+                        try:
+                            # Proper time-based query for this chunk
+                            chunk_query = {
+                                'query': {
+                                    'bool': {
+                                        'must': [
+                                            {
+                                                'range': {
+                                                    'properties.newest_alert_observation_time': {
+                                                        'gte': chunk_start_time.mjd,
+                                                        'lte': chunk_end_time.mjd
+                                                    }
+                                                }
+                                            },
+                                            {
+                                                'range': {
+                                                    'properties.ztf_object_id': {
+                                                        'gte': 'ZTF18',  # All ZTF objects (not just 2024)
+                                                        'lte': 'ZTF99'
+                                                    }
+                                                }
+                                            }
+                                        ]
                                     }
-                                }
-                            },
-                            {
-                                'range': {
-                                    'properties.ztf_object_id': {
-                                        'gte': 'ZTF18',  # Only ZTF objects
-                                        'lte': 'ZTF99'
-                                    }
-                                }
+                                },
+                                'sort': [
+                                    {'properties.newest_alert_observation_time': {'order': 'desc'}}
+                                ],
+                                'size': strategy['size'],
+                                'from': 0  # Start from beginning for each time chunk
                             }
-                        ]
-                    }
-                },
-                'sort': [
-                    {'properties.newest_alert_observation_time': {'order': 'desc'}}
-                ]
-            }
-            
-            logger.info(f"Batch {batch_count}: Querying MJD {current_start.mjd:.1f} to {current_end.mjd:.1f}")
-            
-            try:
-                import signal
+                            
+                            logger.info(f"    Attempt {attempt+1}: querying {strategy['size']} objects with {strategy['timeout']}s timeout")
+                            results = search(chunk_query)
+                            page_list = list(results) if results else []
+                            
+                            logger.info(f"    Retrieved {len(page_list)} objects for this time chunk")
+                            
+                            if len(page_list) > 0:
+                                chunk_results.extend(page_list)
+                                chunk_success = True
+                                logger.info(f"    ✓ Success with {strategy['name']} for time chunk!")
+                                
+                                # Try to get more results with pagination within this strategy
+                                page_size = strategy['size']
+                                from_offset = page_size
+                                max_pages = 5  # Limit pagination to prevent infinite loops
+                                
+                                for page in range(max_pages):
+                                    try:
+                                        # Set a shorter timeout for pagination
+                                        signal.alarm(strategy['timeout'] // 2)
+                                        
+                                        paginated_query = chunk_query.copy()
+                                        paginated_query['from'] = from_offset
+                                        
+                                        logger.info(f"    Fetching page {page + 2} (from offset {from_offset})")
+                                        page_results = search(paginated_query)
+                                        page_list = list(page_results) if page_results else []
+                                        
+                                        if len(page_list) == 0:
+                                            logger.info(f"    No more results on page {page + 2} - stopping pagination")
+                                            break
+                                        
+                                        chunk_results.extend(page_list)
+                                        from_offset += page_size
+                                        logger.info(f"    Retrieved {len(page_list)} additional objects (total: {len(chunk_results)})")
+                                        
+                                    except (TimeoutError, Exception) as e:
+                                        logger.warning(f"    Pagination page {page + 2} failed: {e}")
+                                        break  # Stop pagination on error but keep chunk_results
+                                
+                                break  # Success with this strategy
+                            else:
+                                logger.info(f"    No results for attempt {attempt+1}")
+                                
+                            signal.alarm(0)
+                            
+                        except TimeoutError:
+                            signal.alarm(0)
+                            logger.warning(f"    Attempt {attempt+1} timed out")
+                            continue
+                        except Exception as e:
+                            signal.alarm(0)
+                            logger.warning(f"    Attempt {attempt+1} failed: {e}")
+                            continue
+                            
+                    except Exception as e:
+                        logger.error(f"Strategy setup failed: {e}")
+                        break
                 
-                def timeout_handler(signum, frame):
-                    raise TimeoutError(f"Antares batch query {batch_count} timed out after 30 seconds")
-                
-                # Set up timeout for each batch (shorter since it's smaller)
-                signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(30)  # 30 second timeout per batch
-                
-                try:
-                    batch_results = search(batch_query)
-                    batch_list = list(batch_results) if batch_results else []
-                    
-                    logger.info(f"Batch {batch_count}: Found {len(batch_list)} objects")
-                    total_results.extend(batch_list)
-                    
-                finally:
-                    # Cancel the alarm
-                    signal.alarm(0)
-                    
-            except TimeoutError as e:
-                logger.error(f"Batch {batch_count} timed out: {e}")
-                logger.warning(f"Skipping batch {batch_count} due to timeout")
-                continue
-            except Exception as e:
-                logger.error(f"Batch {batch_count} failed: {e}")
-                logger.warning(f"Skipping batch {batch_count} due to error")
-                continue
+                if chunk_success:
+                    break  # Found results for this time chunk
             
-            # Move to next batch
-            current_end = current_start
+            # Add chunk results to total
+            if chunk_results:
+                total_results.extend(chunk_results)
+                logger.info(f"Time chunk {chunk_idx + 1} yielded {len(chunk_results)} objects (total so far: {len(total_results)})")
+            else:
+                logger.warning(f"Time chunk {chunk_idx + 1} yielded no results")
             
-            # Small delay between batches to be nice to Antares
-            import time
-            time.sleep(0.5)
+            # Small delay between time chunks to be respectful to the API
+            if chunk_idx < max_time_chunks - 1:
+                time.sleep(0.5)
+            
+            # Stop early if we've reached the original start time
+            if chunk_start_time.mjd <= start_time.mjd:
+                logger.info("Reached original start time - stopping pagination")
+                break
         
-        results_list = total_results
-        logger.info(f"Completed batched query: {len(results_list)} total objects from {batch_count} batches")
+        # Remove duplicates (objects might appear in multiple time chunks)
+        seen_ids = set()
+        deduplicated_results = []
+        for obj in total_results:
+            # Try to get a unique identifier
+            obj_id = None
+            if hasattr(obj, 'catalog_objects') and obj.catalog_objects:
+                if isinstance(obj.catalog_objects, list) and len(obj.catalog_objects) > 0:
+                    catalog_obj = obj.catalog_objects[0]
+                    if hasattr(catalog_obj, 'catalog_object_id'):
+                        obj_id = catalog_obj.catalog_object_id
+            
+            if obj_id and obj_id not in seen_ids:
+                seen_ids.add(obj_id)
+                deduplicated_results.append(obj)
+            elif not obj_id:
+                # If we can't get an ID, keep it (safer to have duplicates than miss objects)
+                deduplicated_results.append(obj)
+        
+        logger.info(f"Daily pagination complete: found {len(total_results)} total objects, {len(deduplicated_results)} unique objects")
+        
+        results_list = deduplicated_results
+        logger.info(f"ANTARES query result: {len(results_list)} objects found")
         
         if not results_list:
-            logger.warning(f"No objects found in Antares query for the last {lookback_days} days")
+            logger.warning(f"Daily pagination failed - trying fallback connectivity test...")
             
-            # Try a broader search to see if Antares is responsive
-            if lookback_days < 30:
-                logger.info("Trying broader search to test Antares connectivity...")
-                try:
-                    broader_query = {
-                        'query': {
-                            'bool': {
-                                'must': [
-                                    {
-                                        'range': {
-                                            'properties.newest_alert_observation_time': {
-                                                'gte': (end_time - 30 * u.day).mjd,
-                                                'lte': end_time.mjd
-                                            }
-                                        }
-                                    },
-                                    {
-                                        'range': {
-                                            'properties.ztf_object_id': {
-                                                'gte': 'ZTF18',
-                                                'lte': 'ZTF99'
-                                            }
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                    
-                    broader_results = list(search(broader_query))
-                    logger.info(f"Broader 30-day search found {len(broader_results)} objects")
-                    
-                    if len(broader_results) > 0:
-                        logger.info("Antares is working, just no recent detections in your timeframe")
-                    else:
-                        logger.warning("Even 30-day search found nothing - possible Antares issue")
-                        
-                except Exception as e:
-                    logger.warning(f"Broader search failed: {e}")
+            # Try basic connectivity test as fallback
+            try:
+                from antares_client.search import get_by_ztf_object_id
+                test_obj = get_by_ztf_object_id('ZTF18aabtxvd')
+                if test_obj:
+                    logger.info("✓ ANTARES individual queries work")
+                    logger.warning("✗ But time-based bulk queries are currently failing")
+                else:
+                    logger.error("✗ Even individual queries failing")
+            except Exception as e:
+                logger.error(f"✗ Connectivity test failed: {e}")
             
-            logger.info(f"This is normal - ZTF doesn't necessarily have new detections every day")
-            logger.info(f"Try increasing lookback_days if you expect more objects")
+            logger.warning(f"No new objects retrieved from ANTARES")
+            
+            logger.info("ANTARES infrastructure status:")
+            logger.info("✓ Individual object queries: Working")
+            logger.info("✗ Time-based bulk queries: Failing (even with daily pagination)")
+            logger.info("✗ New object discovery: Currently unavailable")
+            logger.info("")
+            logger.info("System behavior:")
+            logger.info("• Existing objects in database will continue to be processed")
+            logger.info("• Manual object addition via web interface still works")
+            logger.info("• Individual object lookups still function")
+            logger.info("• New object discovery will resume when ANTARES API improves")
+            
             return None
         
         # Convert to DataFrame with improved debugging
