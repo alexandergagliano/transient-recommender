@@ -1437,12 +1437,12 @@ function updateObjectDisplay() {
         return;
     }
 
-    // Update object info with explanation
+    // Update object info (explanation will be set by refreshExplanation)
     objectId.innerHTML = `
         <div class="d-flex flex-column">
             <div>${ztfid}</div>
             <small class="text-muted mt-1">
-                <i class="fas fa-info-circle"></i> <em>${object.explanation || 'Recommended based on its features'}</em>
+                <i class="fas fa-info-circle"></i> <em>Loading explanation...</em>
             </small>
         </div>
     `;
@@ -4576,29 +4576,44 @@ async function refreshExplanation(ztfid) {
         // Use the current science case from the global variable or select element
         const scienceSelect = document.getElementById('scienceSelect');
         const scienceCase = scienceSelect ? scienceSelect.value : currentScienceCase;
+        
+        console.log(`Refreshing explanation for ${ztfid} with science case: ${scienceCase}`);
+        
         const response = await fetch(`/api/explanation/${ztfid}?science_case=${scienceCase}`);
         
         if (response.ok) {
             const data = await response.json();
+            console.log(`New explanation for ${ztfid}: ${data.explanation}`);
             
             // Update the explanation in the current object
             const currentObject = currentRecommendations[currentIndex];
-            if (currentObject && currentObject.ztfid === ztfid) {
-                currentObject.explanation = data.explanation;
+            if (currentObject) {
+                const currentZtfid = currentObject.ztfid || currentObject.ZTFID;
+                console.log(`Current object ZTFID: ${currentZtfid}, requested ZTFID: ${ztfid}`);
                 
-                // Update the display
-                const objectId = document.getElementById('currentObjectId');
-                if (objectId) {
-                    objectId.innerHTML = `
-                        <div class="d-flex flex-column">
-                            <div>${ztfid}</div>
-                            <small class="text-muted mt-1">
-                                <i class="fas fa-info-circle"></i> <em>${data.explanation}</em>
-                            </small>
-                        </div>
-                    `;
+                if (currentZtfid === ztfid) {
+                    currentObject.explanation = data.explanation;
+                    console.log('Updated explanation in object cache');
                 }
             }
+            
+            // Always update the display regardless of object cache
+            const objectId = document.getElementById('currentObjectId');
+            if (objectId) {
+                objectId.innerHTML = `
+                    <div class="d-flex flex-column">
+                        <div>${ztfid}</div>
+                        <small class="text-muted mt-1">
+                            <i class="fas fa-info-circle"></i> <em>${data.explanation}</em>
+                        </small>
+                    </div>
+                `;
+                console.log('Updated explanation in DOM');
+            } else {
+                console.error('currentObjectId element not found');
+            }
+        } else {
+            console.error(`Failed to fetch explanation: ${response.status}`);
         }
     } catch (error) {
         console.error('Error refreshing explanation:', error);
