@@ -430,26 +430,46 @@ class WebRecommender:
                         return f"Recommended because it's similar to known {science_case} objects"
                 return f"Recommended for {science_case} science case"
             
-            # Find nearest liked object
-            min_dist = float('inf')
-            nearest_ztfid = None
-            nearest_science_case = None
+            # Find nearest liked object, prioritizing same science case
+            min_dist_same_case = float('inf')
+            min_dist_any_case = float('inf')
+            nearest_ztfid_same_case = None
+            nearest_ztfid_any_case = None
+            nearest_science_case_any = None
             
             for vote in liked_votes:
                 vote_idx = np.where(self.processed_features['ztfids'] == vote.ztfid)[0]
                 if len(vote_idx) > 0:
                     vote_features = self.processed_features['X_scaled'][vote_idx[0]]
                     dist = np.linalg.norm(obj_features - vote_features)
-                    if dist < min_dist:
-                        min_dist = dist
-                        nearest_ztfid = vote.ztfid
-                        nearest_science_case = vote.science_case
+                    
+                    # Track nearest from same science case
+                    if vote.science_case == science_case and dist < min_dist_same_case:
+                        min_dist_same_case = dist
+                        nearest_ztfid_same_case = vote.ztfid
+                    
+                    # Track nearest from any science case
+                    if dist < min_dist_any_case:
+                        min_dist_any_case = dist
+                        nearest_ztfid_any_case = vote.ztfid
+                        nearest_science_case_any = vote.science_case
             
-            if nearest_ztfid:
-                if nearest_science_case == science_case:
-                    return f"Recommended because you liked {nearest_ztfid}"
+            # Prioritize explanations based on science case context
+            if science_case == "all":
+                # For "all" science case, provide more general explanations
+                if nearest_ztfid_any_case:
+                    if nearest_science_case_any == "all":
+                        return f"Recommended because you liked {nearest_ztfid_any_case}"
+                    else:
+                        return f"Recommended because you liked {nearest_ztfid_any_case} (a {nearest_science_case_any} object)"
                 else:
-                    return f"Recommended because you liked {nearest_ztfid} (a {nearest_science_case} object)"
+                    return "Recommended based on your general preferences"
+            else:
+                # For specific science cases, prioritize same-case matches
+                if nearest_ztfid_same_case:
+                    return f"Recommended because you liked {nearest_ztfid_same_case} (also {science_case})"
+                elif nearest_ztfid_any_case:
+                    return f"Recommended because you liked {nearest_ztfid_any_case} (a {nearest_science_case_any} object)"
             
             # If no personal likes match but others liked this object
             if other_users_likes:
