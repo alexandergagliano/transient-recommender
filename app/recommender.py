@@ -22,6 +22,7 @@ from astroplan.constraints import TimeConstraint
 
 from . import models
 from .pending_votes import get_pending_objects_for_science_case
+from fastapi import HTTPException
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -380,10 +381,26 @@ class WebRecommender:
             A string explaining why this object was recommended
         """
         try:
+            # Check if processed_features is available
+            if not hasattr(self, 'processed_features') or self.processed_features is None:
+                logger.warning("No processed features available for explanation generation")
+                return f"Recommended for {science_case} science case"
+            
+            # Check if ztfids are available in processed features
+            if 'ztfids' not in self.processed_features:
+                logger.warning("No ztfids found in processed features")
+                return f"Recommended for {science_case} science case"
+            
             # Get the recommended object's features
             obj_idx = np.where(self.processed_features['ztfids'] == ztfid)[0]
             if len(obj_idx) == 0:
+                logger.warning(f"Object {ztfid} not found in processed features")
                 return "Recommended based on its features"
+            
+            # Check if X_scaled is available
+            if 'X_scaled' not in self.processed_features:
+                logger.warning("No X_scaled found in processed features")
+                return f"Recommended for {science_case} science case"
             
             obj_features = self.processed_features['X_scaled'][obj_idx[0]]
             
@@ -441,7 +458,7 @@ class WebRecommender:
             return f"Recommended for {science_case} science case"
             
         except Exception as e:
-            logger.error(f"Error generating recommendation explanation: {e}")
+            logger.error(f"Error generating recommendation explanation for {ztfid}: {e}", exc_info=True)
             return f"Recommended for {science_case} science case"
     
     def get_recommendations(self, db: Session, user_id: int, k: int = 10, science_case: str = "snia-like",
@@ -461,9 +478,9 @@ class WebRecommender:
                 logger.info("Feature bank is None, loading from database...")
                 self.feature_bank = self.get_feature_bank_from_db(db)
                 
-                if len(self.feature_bank) == 0:
-                    logger.error("No feature bank available")
-                    return []
+                if self.feature_bank is None or len(self.feature_bank) == 0:
+                    logger.error("No feature bank available - database may be empty or connection failed")
+                    raise HTTPException(status_code=503, detail="Feature bank not available. Please try again later or contact administrator.")
                 
                 logger.info(f"Loaded feature bank with {len(self.feature_bank)} objects")
                 
