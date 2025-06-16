@@ -712,6 +712,13 @@ async function loadRecommendations() {
         
         console.log('Calling updateObjectDisplay...');
         updateObjectDisplay();
+        
+        // Refresh explanation for the new science case context
+        const currentObject = getCurrentObject();
+        if (currentObject) {
+            refreshExplanation(currentObject);
+        }
+        
         showToast(`Loaded ${currentRecommendations.length} recommendations`, 'success');
     } catch (error) {
         console.error('Error loading recommendations:', error);
@@ -4566,7 +4573,9 @@ async function refreshExplanation(ztfid) {
     if (!ztfid) return;
     
     try {
-        const scienceCase = document.getElementById('scienceSelect').value;
+        // Use the current science case from the global variable or select element
+        const scienceSelect = document.getElementById('scienceSelect');
+        const scienceCase = scienceSelect ? scienceSelect.value : currentScienceCase;
         const response = await fetch(`/api/explanation/${ztfid}?science_case=${scienceCase}`);
         
         if (response.ok) {
