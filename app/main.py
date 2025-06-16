@@ -42,11 +42,15 @@ import uvicorn
 try:
     import antares_client
     from antares_client.search import search
-    from astropy.time import Time
-    from astropy import units as u
 except ImportError:
     antares_client = None
     search = None
+
+# Astropy imports (needed for daily extraction scheduler)
+try:
+    from astropy.time import Time
+    from astropy import units as u
+except ImportError:
     Time = None
     u = None
 
@@ -3223,7 +3227,6 @@ def schedule_daily_extraction():
                 logger.info("🕐 Starting scheduled daily feature extraction (1 day lookback)")
                 
                 # Run daily extraction with 1.5 day lookback for small queries
-                from app.feature_extractor import get_last_extraction_run
                 
                 with SessionLocal() as daily_db:
                     last_run = get_last_extraction_run(daily_db)
@@ -3234,7 +3237,6 @@ def schedule_daily_extraction():
                         continue
                     
                     if last_run and last_run.run_date:
-                        from astropy.time import Time
                         hours_since_last = (Time.now().mjd - last_run.mjd_run) * 24
                         if hours_since_last < 23:
                             logger.info(f"Last extraction was {hours_since_last:.1f} hours ago, skipping daily extraction")
