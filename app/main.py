@@ -567,9 +567,29 @@ async def get_recommendations(
     db: Session = Depends(get_db)
 ):
     """Get recommendations for the current user."""
-    logger.info(f"API: get_recommendations called with start_ztfid={start_ztfid}, science_case={science_case}, realtime_mode={realtime_mode}")
-    if realtime_mode:
-        logger.info(f"Real-time mode: filtering to objects with detections in last {recent_days} days")
+    logger.info(f"API: get_recommendations called with parameters:")
+    logger.info(f"  - science_case: {science_case}")
+    logger.info(f"  - count: {count}")
+    logger.info(f"  - obs_telescope: {obs_telescope}")
+    logger.info(f"  - obs_days: {obs_days}")
+    logger.info(f"  - obs_mag_limit: {obs_mag_limit}")
+    logger.info(f"  - start_ztfid: {start_ztfid}")
+    logger.info(f"  - realtime_mode: {realtime_mode}")
+    logger.info(f"  - recent_days: {recent_days}")
+    logger.info(f"  - user_id: {current_user.id}")
+    
+    # Log recommender state
+    logger.info("Recommender state:")
+    logger.info(f"  - feature_bank: {recommender_engine.feature_bank is not None}")
+    logger.info(f"  - sampled_feature_bank: {recommender_engine.sampled_feature_bank is not None}")
+    logger.info(f"  - processed_features: {recommender_engine.processed_features is not None}")
+    
+    if recommender_engine.feature_bank is not None:
+        logger.info(f"  - feature_bank size: {len(recommender_engine.feature_bank)}")
+    if recommender_engine.sampled_feature_bank is not None:
+        logger.info(f"  - sampled_feature_bank size: {len(recommender_engine.sampled_feature_bank)}")
+    if recommender_engine.processed_features is not None:
+        logger.info(f"  - processed_features size: {len(recommender_engine.processed_features['ztfids'])}")
     
     try:
         recommendations = recommender_engine.get_recommendations(
@@ -610,6 +630,10 @@ async def get_recommendations(
         # Return a 422 (Unprocessable Entity) status code to indicate valid request but no results
         from fastapi import HTTPException
         raise HTTPException(status_code=422, detail=error_response)
+    
+    except Exception as e:
+        logger.error(f"Error in get_recommendations API endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_app.post("/vote")
 async def vote(
