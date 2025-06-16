@@ -1473,6 +1473,9 @@ function updateObjectDisplay() {
 
     // Start vote counts refresh for this object
     startVoteCountsRefresh();
+    
+    // Refresh explanation based on current voting history
+    refreshExplanation(ztfid);
 }
 
 /**
@@ -1571,6 +1574,9 @@ async function handleVote(ztfid, voteType) {
             
             // STAY on the current page - do NOT advance to next object
             // Users can review their vote, add tags/notes, then click "Next" to advance
+            
+            // Refresh explanation since voting history has changed
+            refreshExplanation(ztfid);
             
         } else {
             throw new Error(`Error: ${response.status}`);
@@ -4551,4 +4557,41 @@ function toggleRealtimeMode() {
     
     // Update recommendations when mode changes
     updateRecommendations();
+}
+
+/**
+ * Refresh the explanation for the current object based on updated voting history
+ */
+async function refreshExplanation(ztfid) {
+    if (!ztfid) return;
+    
+    try {
+        const scienceCase = document.getElementById('scienceSelect').value;
+        const response = await fetch(`/api/explanation/${ztfid}?science_case=${scienceCase}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Update the explanation in the current object
+            const currentObject = currentRecommendations[currentIndex];
+            if (currentObject && currentObject.ztfid === ztfid) {
+                currentObject.explanation = data.explanation;
+                
+                // Update the display
+                const objectId = document.getElementById('currentObjectId');
+                if (objectId) {
+                    objectId.innerHTML = `
+                        <div class="d-flex flex-column">
+                            <div>${ztfid}</div>
+                            <small class="text-muted mt-1">
+                                <i class="fas fa-info-circle"></i> <em>${data.explanation}</em>
+                            </small>
+                        </div>
+                    `;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error refreshing explanation:', error);
+    }
 }

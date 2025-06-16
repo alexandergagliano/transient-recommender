@@ -3162,6 +3162,23 @@ async def complete_demo(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error completing demo: {str(e)}")
 
+@api_app.get("/explanation/{ztfid}")
+async def get_explanation(
+    ztfid: str,
+    science_case: str = "snia-like",
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a fresh explanation for why an object is recommended to the current user."""
+    try:
+        explanation = recommender_engine.generate_recommendation_explanation(
+            db, ztfid, current_user.id, science_case
+        )
+        return {"explanation": explanation}
+    except Exception as e:
+        logger.error(f"Error generating explanation for {ztfid}: {e}", exc_info=True)
+        return {"explanation": f"Recommended for {science_case} science case"}
+
 # Mount the API app after all routes are defined
 app.mount("/api", api_app)
 
