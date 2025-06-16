@@ -410,6 +410,8 @@ class WebRecommender:
                 models.Vote.vote_type.in_(["like", "target"])
             ).all()
             
+            logger.info(f"User {user_id} has {len(liked_votes)} liked/target votes: {[v.ztfid for v in liked_votes]}")
+            
             # Get other users' likes for this object in the same science case
             other_users_likes = db.query(models.Vote).filter(
                 models.Vote.ztfid == ztfid,
@@ -443,33 +445,47 @@ class WebRecommender:
                     vote_features = self.processed_features['X_scaled'][vote_idx[0]]
                     dist = np.linalg.norm(obj_features - vote_features)
                     
+                    logger.info(f"Distance from {ztfid} to liked {vote.ztfid} ({vote.science_case}): {dist:.4f}")
+                    
                     # Track nearest from same science case
                     if vote.science_case == science_case and dist < min_dist_same_case:
                         min_dist_same_case = dist
                         nearest_ztfid_same_case = vote.ztfid
+                        logger.info(f"New nearest same-case: {vote.ztfid} (dist: {dist:.4f})")
                     
                     # Track nearest from any science case
                     if dist < min_dist_any_case:
                         min_dist_any_case = dist
                         nearest_ztfid_any_case = vote.ztfid
                         nearest_science_case_any = vote.science_case
+                        logger.info(f"New nearest any-case: {vote.ztfid} (dist: {dist:.4f})")
+                else:
+                    logger.warning(f"Liked object {vote.ztfid} not found in processed features")
             
             # Prioritize explanations based on science case context
+            logger.info(f"Final results - same_case: {nearest_ztfid_same_case}, any_case: {nearest_ztfid_any_case} ({nearest_science_case_any})")
+            
             if science_case == "all":
                 # For "all" science case, provide more general explanations
                 if nearest_ztfid_any_case:
                     if nearest_science_case_any == "all":
-                        return f"Recommended because you liked {nearest_ztfid_any_case}"
+                        explanation = f"Recommended because you liked {nearest_ztfid_any_case}"
                     else:
-                        return f"Recommended because you liked {nearest_ztfid_any_case} (a {nearest_science_case_any} object)"
+                        explanation = f"Recommended because you liked {nearest_ztfid_any_case} (a {nearest_science_case_any} object)"
+                    logger.info(f"Generated explanation for {ztfid}: {explanation}")
+                    return explanation
                 else:
                     return "Recommended based on your general preferences"
             else:
                 # For specific science cases, prioritize same-case matches
                 if nearest_ztfid_same_case:
-                    return f"Recommended because you liked {nearest_ztfid_same_case} (also {science_case})"
+                    explanation = f"Recommended because you liked {nearest_ztfid_same_case} (also {science_case})"
+                    logger.info(f"Generated explanation for {ztfid}: {explanation}")
+                    return explanation
                 elif nearest_ztfid_any_case:
-                    return f"Recommended because you liked {nearest_ztfid_any_case} (a {nearest_science_case_any} object)"
+                    explanation = f"Recommended because you liked {nearest_ztfid_any_case} (a {nearest_science_case_any} object)"
+                    logger.info(f"Generated explanation for {ztfid}: {explanation}")
+                    return explanation
             
             # If no personal likes match but others liked this object
             if other_users_likes:
