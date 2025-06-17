@@ -781,12 +781,14 @@ a:hover {
     }
     
     .demo-object-viewer {
-        height: 50vh !important;
+        height: 65vh !important;
+        min-height: 400px;
     }
 }
 
 .demo-object-viewer {
-    height: 300px !important;
+    height: 60vh !important;
+    min-height: 500px;
 }
 
 /* Theme Toggle Tabs */

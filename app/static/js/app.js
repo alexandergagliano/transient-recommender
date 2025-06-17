@@ -3442,6 +3442,115 @@ async function startDemoInstant() {
     try {
         console.log('🚀 Starting instant demo with hardcoded examples...');
         
+        // Show skill level selection first
+        showSkillLevelSelection();
+        
+    } catch (error) {
+        console.error('❌ Failed to start instant demo:', error);
+        console.error('🔍 Error details:', error.stack);
+        showToast('Failed to start instant demo - check console for details', 'error');
+    }
+}
+
+function showSkillLevelSelection() {
+    const skillModalHtml = `
+        <div class="modal fade" id="skillLevelModal" tabindex="-1" aria-labelledby="skillLevelModalLabel" aria-hidden="true" 
+             data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h4 class="modal-title" id="skillLevelModalLabel">
+                            <i class="fas fa-graduation-cap"></i> Welcome to the Transient Classification System!
+                        </h4>
+                    </div>
+                    <div class="modal-body text-center p-5">
+                        <h5 class="mb-4">What's your experience level with time-domain astrophysics?</h5>
+                        <p class="text-muted mb-4">This helps us customize the tutorial to your background.</p>
+                        
+                        <div class="row justify-content-center">
+                            <div class="col-md-5 mb-3">
+                                <button class="btn btn-outline-primary btn-lg w-100 h-100 skill-level-btn" data-level="beginner">
+                                    <div class="p-3">
+                                        <i class="fas fa-seedling fa-2x mb-3 d-block"></i>
+                                        <h6>I'm new to time-domain astrophysics</h6>
+                                        <small class="text-muted">
+                                            Start with basics: light curves, host galaxies, and astronomical classifications
+                                        </small>
+                                    </div>
+                                </button>
+                            </div>
+                            <div class="col-md-5 mb-3">
+                                <button class="btn btn-outline-success btn-lg w-100 h-100 skill-level-btn" data-level="expert">
+                                    <div class="p-3">
+                                        <i class="fas fa-microscope fa-2x mb-3 d-block"></i>
+                                        <h6>I study time-domain astrophysics professionally</h6>
+                                        <small class="text-muted">
+                                            Skip basics, focus on classification system and annotation tools
+                                        </small>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-4">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i> 
+                                You can always change this later or restart the tutorial
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <style>
+        .skill-level-btn {
+            transition: all 0.3s ease;
+            border: 2px solid;
+            min-height: 200px;
+        }
+        .skill-level-btn:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        .skill-level-btn[data-level="beginner"]:hover {
+            border-color: #0d6efd;
+            background-color: rgba(13, 110, 253, 0.1);
+        }
+        .skill-level-btn[data-level="expert"]:hover {
+            border-color: #198754;
+            background-color: rgba(25, 135, 84, 0.1);
+        }
+        </style>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', skillModalHtml);
+    
+    const modal = new bootstrap.Modal(document.getElementById('skillLevelModal'), {
+        backdrop: 'static',
+        keyboard: false
+    });
+    modal.show();
+    
+    // Handle skill level selection
+    document.querySelectorAll('.skill-level-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const level = this.dataset.level;
+            modal.hide();
+            
+            // Remove modal after hiding
+            document.getElementById('skillLevelModal').addEventListener('hidden.bs.modal', function () {
+                this.remove();
+                startDemoWithLevel(level);
+            });
+        });
+    });
+}
+
+function startDemoWithLevel(skillLevel) {
+    try {
+        console.log(`Starting demo for skill level: ${skillLevel}`);
+        
         // Hardcoded demo objects that work instantly
         const instantDemoObjects = [
             {
@@ -3515,13 +3624,55 @@ async function startDemoInstant() {
             }
         ];
         
-        console.log('✅ Instant demo objects ready, showing step-by-step demo');
-        showStepByStepDemo(instantDemoObjects);
+        // Create intro steps for beginners
+        const introSteps = [];
+        
+        if (skillLevel === 'beginner') {
+            // Add introduction steps about ALeRCE interface
+            introSteps.push(
+                {
+                    ztfid: 'INTRO_LIGHTCURVE',
+                    science_case: 'intro',
+                    description: 'Welcome! Let\'s start by understanding what you\'re looking at in the ALeRCE interface.',
+                    key_features: 'Light curves, host galaxies, and detection information',
+                    is_intro: true,
+                    intro_type: 'lightcurve',
+                    learning_points: [
+                        'The plot on the RIGHT shows a light curve - brightness over time',
+                        'Green circles (g-band) and red circles (r-band) are detections',
+                        'The y-axis shows magnitude (brightness) - LOWER values = BRIGHTER',
+                        'The x-axis shows time in Modified Julian Days (MJD)',
+                        'Triangles pointing down are upper limits (non-detections)'
+                    ]
+                },
+                {
+                    ztfid: 'INTRO_METADATA',
+                    science_case: 'intro',
+                    description: 'Now let\'s understand the object information and host galaxy image.',
+                    key_features: 'Object metadata, classifications, and host galaxy images',
+                    is_intro: true,
+                    intro_type: 'metadata',
+                    learning_points: [
+                        'TOP LEFT shows object name (ZTF ID), discovery date, and coordinates',
+                        'Classifications like "SN IIn" tell us the object type if known',
+                        'BOTTOM LEFT shows the host galaxy image from surveys',
+                        'The crosshair marks where the transient appeared',
+                        '"Detections" = how many times the object was observed'
+                    ]
+                }
+            );
+        }
+        
+        // Combine intro steps with science demo objects
+        const allDemoObjects = [...introSteps, ...instantDemoObjects];
+        
+        console.log(`✅ Demo ready with ${allDemoObjects.length} steps for ${skillLevel} level`);
+        showStepByStepDemo(allDemoObjects, skillLevel);
         
     } catch (error) {
-        console.error('❌ Failed to start instant demo:', error);
+        console.error('❌ Failed to start demo with level:', error);
         console.error('🔍 Error details:', error.stack);
-        showToast('Failed to start instant demo - check console for details', 'error');
+        showToast('Failed to start demo - check console for details', 'error');
     }
 }
 
@@ -3570,7 +3721,7 @@ async function startDemo() {
     }
 }
 
-function showStepByStepDemo(demoObjects) {
+function showStepByStepDemo(demoObjects, skillLevel = 'expert') {
     // Create larger demo modal with step-by-step interface
     const modalHtml = `
         <div class="modal fade" id="demoModal" tabindex="-1" aria-labelledby="demoModalLabel" aria-hidden="true" 
@@ -3601,24 +3752,52 @@ function showStepByStepDemo(demoObjects) {
                                         <div class="col-lg-8">
                                             <div class="demo-science-case-header mb-3">
                                                 <h3 class="text-primary">
-                                                    <i class="fas fa-telescope"></i> 
-                                                    ${(obj.science_case || 'transient').replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                                    <span class="badge bg-primary ms-2">${obj.ztfid || obj.ZTFID || 'Demo Object'}</span>
+                                                    <i class="fas fa-${obj.is_intro ? 'info-circle' : 'telescope'}"></i> 
+                                                    ${obj.is_intro ? 'ALeRCE Interface Guide' : (obj.science_case || 'transient').replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                                    <span class="badge ${obj.is_intro ? 'bg-info' : 'bg-primary'} ms-2">${obj.is_intro ? `Intro ${obj.intro_type}` : (obj.ztfid || obj.ZTFID || 'Demo Object')}</span>
                                                 </h3>
                                                 <p class="lead">${obj.description || 'This is a demonstration object to help you learn the classification system.'}</p>
-                                                <div class="alert alert-light">
+                                                <div class="alert ${obj.is_intro ? 'alert-info' : 'alert-light'}">
                                                     <strong>Key Features:</strong> ${obj.key_features || 'Practice using all the classification tools below.'}
                                                 </div>
                                             </div>
                                             
-                                            <div class="demo-object-viewer mb-3" style="height: 50vh; border: 3px solid #007bff; border-radius: 10px; overflow: hidden;">
-                                                <iframe src="https://alerce.online/object/${obj.ztfid || obj.ZTFID || 'ZTF19aaaaaa'}" 
+                                            <div class="demo-object-viewer mb-3" style="height: 50vh; border: 3px solid ${obj.is_intro ? '#0dcaf0' : '#007bff'}; border-radius: 10px; overflow: hidden;">
+                                                <iframe src="https://alerce.online/object/${obj.is_intro ? 'ZTF20aacbyec' : (obj.ztfid || obj.ZTFID || 'ZTF19aaaaaa')}" 
                                                         style="width: 100%; height: 100%; border: none;">
                                                 </iframe>
                                             </div>
                                             
-                                            <div class="demo-actions-section">
-                                                <h5 class="mb-3"><i class="fas fa-hand-pointer"></i> Try These Actions:</h5>
+                                            ${obj.is_intro ? `
+                                                <div class="demo-intro-instructions">
+                                                    <div class="alert alert-info">
+                                                        <h5><i class="fas fa-hand-pointer"></i> Look at the ALeRCE interface above and try to identify:</h5>
+                                                        <ul class="mb-0">
+                                                            ${obj.intro_type === 'lightcurve' ? `
+                                                                <li>The light curve plot on the right side</li>
+                                                                <li>Green and red data points (different filters)</li>
+                                                                <li>How brightness changes over time</li>
+                                                                <li>Any patterns in the light curve shape</li>
+                                                            ` : `
+                                                                <li>Object information in the top left</li>
+                                                                <li>The host galaxy image in the bottom left</li>
+                                                                <li>Classification information if available</li>
+                                                                <li>Detection and coordinate details</li>
+                                                            `}
+                                                        </ul>
+                                                        <div class="mt-3">
+                                                            <button class="btn btn-success demo-intro-continue" data-step="${index}">
+                                                                <i class="fas fa-check"></i> I understand this part, continue!
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ` : ''}
+                                            
+                                            ${!obj.is_intro ? `
+                                                <div class="demo-actions-section">
+                                                    <h5 class="mb-3"><i class="fas fa-hand-pointer"></i> Try These Actions:</h5>
+                                            ` : ''}
                                                 
                                                 <!-- Enhanced Voting Section -->
                                                 <div class="demo-action-group mb-3">
@@ -3808,7 +3987,7 @@ function showStepByStepDemo(demoObjects) {
                             `).join('')}
                         </div>
                     </div>
-                    <div class="modal-footer justify-content-between">
+                    <div class="modal-footer">
                         <div class="demo-progress-info">
                             <span class="text-muted">Progress: </span>
                             <span id="demoProgressText">0% complete</span>
@@ -3819,8 +3998,8 @@ function showStepByStepDemo(demoObjects) {
                             </div>
                         </div>
                         
-                        <div class="demo-navigation">
-                            <button type="button" class="btn btn-secondary" id="demoPrevBtn" style="display: none;">
+                        <div class="demo-navigation ms-auto">
+                            <button type="button" class="btn btn-secondary me-2" id="demoPrevBtn" style="display: none;">
                                 <i class="fas fa-arrow-left"></i> Previous
                             </button>
                             <button type="button" class="btn btn-primary" id="demoNextBtn">
@@ -3903,6 +4082,16 @@ function showStepByStepDemo(demoObjects) {
             background: linear-gradient(45deg, #f8f9fa, #ffffff);
             border: 3px dashed #007bff !important;
         }
+        .demo-navigation {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
         </style>
     `;
     
@@ -3917,7 +4106,7 @@ function showStepByStepDemo(demoObjects) {
     modal.show();
     
     // Setup step-by-step demo interactions
-    setupStepByStepDemoInteractions(demoObjects);
+    setupStepByStepDemoInteractions(demoObjects, skillLevel);
     
     // Remove modal when closed
     document.getElementById('demoModal').addEventListener('hidden.bs.modal', function () {
@@ -4062,7 +4251,7 @@ function clearConstraints() {
     loadRecommendations();
 }
 
-function setupStepByStepDemoInteractions(demoObjects) {
+function setupStepByStepDemoInteractions(demoObjects, skillLevel = 'expert') {
     let currentStep = 0;
     
     // Enhanced progress tracking for all actions
@@ -4111,17 +4300,29 @@ function setupStepByStepDemoInteractions(demoObjects) {
         let totalCompleted = 0;
         
         for (let i = 0; i < demoObjects.length; i++) {
-            const requiredActions = ['vote', 'science-tag', 'photometry-tag', 'host-tag', 'comment'];
-            totalRequired += requiredActions.length;
+            const obj = demoObjects[i];
             
-            const stepCompletion = document.getElementById(`stepCompletion${i}`);
-            if (stepCompletion) {
-                requiredActions.forEach(action => {
-                    const checkItem = stepCompletion.querySelector(`[data-action="${action}"]`);
-                    if (checkItem && checkItem.classList.contains('completed')) {
-                        totalCompleted++;
-                    }
-                });
+            if (obj.is_intro) {
+                // Intro steps only require the "continue" button to be clicked
+                totalRequired += 1;
+                const introContinue = document.querySelector(`[data-step="${i}"].demo-intro-continue`);
+                if (introContinue && introContinue.classList.contains('completed')) {
+                    totalCompleted += 1;
+                }
+            } else {
+                // Regular steps require all 5 actions
+                const requiredActions = ['vote', 'science-tag', 'photometry-tag', 'host-tag', 'comment'];
+                totalRequired += requiredActions.length;
+                
+                const stepCompletion = document.getElementById(`stepCompletion${i}`);
+                if (stepCompletion) {
+                    requiredActions.forEach(action => {
+                        const checkItem = stepCompletion.querySelector(`[data-action="${action}"]`);
+                        if (checkItem && checkItem.classList.contains('completed')) {
+                            totalCompleted++;
+                        }
+                    });
+                }
             }
         }
         
@@ -4143,7 +4344,7 @@ function setupStepByStepDemoInteractions(demoObjects) {
             stepBadge.textContent = `Step ${currentStep + 1} of ${demoObjects.length}`;
         }
         
-        // Show completion button ONLY when 100% complete OR if user has tried everything on current step
+        // Show completion button ONLY when 100% complete
         if (percentage >= 100) {
             document.getElementById('demoCompleteBtn').style.display = 'block';
             document.getElementById('demoNextBtn').style.display = 'none';
@@ -4154,15 +4355,6 @@ function setupStepByStepDemoInteractions(demoObjects) {
                 completeBtn.innerHTML = '<i class="fas fa-graduation-cap"></i> Amazing! You\'ve Mastered Everything - Start Classifying!';
                 completeBtn.classList.remove('btn-success');
                 completeBtn.classList.add('btn-warning');
-            }
-        } else if (currentStep >= demoObjects.length - 1 && percentage >= 50) {
-            // If on last step and at least 50% done, allow early completion
-            document.getElementById('demoCompleteBtn').style.display = 'block';
-            document.getElementById('demoNextBtn').style.display = 'none';
-            
-            const completeBtn = document.getElementById('demoCompleteBtn');
-            if (completeBtn) {
-                completeBtn.innerHTML = `<i class="fas fa-graduation-cap"></i> Good Progress (${Math.round(percentage)}%) - Start Classifying!`;
             }
         }
     }
@@ -4218,6 +4410,29 @@ function setupStepByStepDemoInteractions(demoObjects) {
     }
     
     // Enhanced event listeners for all functionality
+    
+    // Intro continue button handlers
+    document.querySelectorAll('.demo-intro-continue').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const step = parseInt(this.dataset.step);
+            
+            this.classList.add('completed');
+            this.innerHTML = '<i class="fas fa-check"></i> Completed!';
+            this.disabled = true;
+            
+            showToast('Great! Moving to the next section...', 'success', 1500);
+            
+            // Update progress
+            updateStepProgress();
+            
+            // Auto-advance to next step after a short delay
+            setTimeout(() => {
+                if (step < demoObjects.length - 1) {
+                    showStep(step + 1);
+                }
+            }, 1000);
+        });
+    });
     
     // Vote button handlers
     document.querySelectorAll('.demo-vote-btn').forEach(btn => {
