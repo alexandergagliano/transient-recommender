@@ -230,10 +230,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Setup target button functionality
     setupTargetModal();
 
-        // Check if demo should be shown (instant for new users)
-    setTimeout(() => {
-    checkDemoAvailability();
-    }, 50); // Very short delay to let page finish loading
+        // Check if demo should be shown (instant for new users) - DISABLED FOR TESTING
+    // setTimeout(() => {
+    // checkDemoAvailability();
+    // }, 50); // Very short delay to let page finish loading
     
     // Request notification permissions for feature extraction alerts
     requestNotificationPermission();
@@ -3442,7 +3442,14 @@ async function startDemoInstant() {
     try {
         console.log('🚀 Starting instant demo with hardcoded examples...');
         
+        // Check if already in a demo to avoid multiple instances
+        if (document.getElementById('skillLevelModal') || document.getElementById('demoModal')) {
+            console.log('⚠️ Demo already running, skipping...');
+            return;
+        }
+        
         // Show skill level selection first
+        console.log('📋 About to show skill level selection...');
         showSkillLevelSelection();
         
     } catch (error) {
@@ -3530,6 +3537,8 @@ function showSkillLevelSelection() {
         backdrop: 'static',
         keyboard: false
     });
+    
+    console.log('🎯 Showing skill level selection modal...');
     modal.show();
     
     // Handle skill level selection
