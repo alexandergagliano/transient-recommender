@@ -3450,7 +3450,9 @@ async function startDemoInstant() {
         
         // Show skill level selection first
         console.log('📋 About to show skill level selection...');
+        console.log('📋 Calling showSkillLevelSelection()...');
         showSkillLevelSelection();
+        console.log('📋 showSkillLevelSelection() called');
         
     } catch (error) {
         console.error('❌ Failed to start instant demo:', error);
@@ -3460,6 +3462,9 @@ async function startDemoInstant() {
 }
 
 function showSkillLevelSelection() {
+    console.log('🎯 showSkillLevelSelection function called');
+    console.log('🎯 Creating skill level modal HTML...');
+    
     const skillModalHtml = `
         <div class="modal fade" id="skillLevelModal" tabindex="-1" aria-labelledby="skillLevelModalLabel" aria-hidden="true" 
              data-bs-backdrop="static" data-bs-keyboard="false">
@@ -3531,8 +3536,10 @@ function showSkillLevelSelection() {
         </style>
     `;
     
+    console.log('🎯 Adding modal HTML to document...');
     document.body.insertAdjacentHTML('beforeend', skillModalHtml);
     
+    console.log('🎯 Creating Bootstrap modal...');
     const modal = new bootstrap.Modal(document.getElementById('skillLevelModal'), {
         backdrop: 'static',
         keyboard: false
@@ -3540,20 +3547,27 @@ function showSkillLevelSelection() {
     
     console.log('🎯 Showing skill level selection modal...');
     modal.show();
+    console.log('🎯 Modal.show() called');
     
     // Handle skill level selection
+    console.log('🎯 Setting up skill level button handlers...');
     document.querySelectorAll('.skill-level-btn').forEach(btn => {
+        console.log(`🎯 Found skill level button: ${btn.dataset.level}`);
         btn.addEventListener('click', function() {
             const level = this.dataset.level;
+            console.log(`🎯 User selected skill level: ${level}`);
+            
             modal.hide();
             
             // Remove modal after hiding
             document.getElementById('skillLevelModal').addEventListener('hidden.bs.modal', function () {
+                console.log(`🎯 Skill level modal hidden, starting demo with level: ${level}`);
                 this.remove();
                 startDemoWithLevel(level);
             });
         });
     });
+    console.log('🎯 Skill level button handlers set up');
 }
 
 function startDemoWithLevel(skillLevel) {
@@ -3637,6 +3651,7 @@ function startDemoWithLevel(skillLevel) {
         const introSteps = [];
         
         if (skillLevel === 'beginner') {
+            console.log('🎓 Creating intro steps for beginner level...');
             // Add introduction steps about ALeRCE interface
             introSteps.push(
                 {
@@ -3670,12 +3685,16 @@ function startDemoWithLevel(skillLevel) {
                     ]
                 }
             );
+            console.log(`🎓 Created ${introSteps.length} intro steps for beginners`);
+        } else {
+            console.log('🎓 Expert level selected, skipping intro steps');
         }
         
         // Combine intro steps with science demo objects
         const allDemoObjects = [...introSteps, ...instantDemoObjects];
         
         console.log(`✅ Demo ready with ${allDemoObjects.length} steps for ${skillLevel} level`);
+        console.log(`📊 Breakdown: ${introSteps.length} intro steps + ${instantDemoObjects.length} science steps`);
         showStepByStepDemo(allDemoObjects, skillLevel);
         
     } catch (error) {
@@ -3742,7 +3761,6 @@ function showStepByStepDemo(demoObjects, skillLevel = 'expert') {
                             <i class="bi bi-play-circle"></i> Welcome! Interactive Classification Demo
                         </h4>
                         <span class="badge bg-light text-success ms-3" id="demoStepBadge">Step 1 of ${demoObjects.length}</span>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body p-4" style="height: calc(100% - 140px); overflow-y: auto;">
                         <div class="demo-welcome-message mb-4" id="demoWelcomeMessage">

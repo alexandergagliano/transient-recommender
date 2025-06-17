@@ -24,8 +24,11 @@
             <input type="text" id="startZtfidInput" class="form-control" placeholder="e.g., ZTF21aaublej" value="{{ start_ztfid or '' }}">
         </div>
         <div class="col-lg-3 col-md-12">
-            <button id="startDemoButton" class="btn btn-success w-100 mt-4" onclick="startDemoInstant()">
+            <button id="startDemoButton" class="btn btn-success w-100 mt-4" onclick="console.log('Demo button clicked!'); startDemoInstant();">
                 <i class="bi bi-play-circle"></i> Start Interactive Demo
+            </button>
+            <button class="btn btn-info w-100 mt-2" onclick="console.log('Test button clicked!'); alert('Test works!');">
+                🧪 Test Button
             </button>
         </div>
     </div>
