@@ -2908,94 +2908,91 @@ async def get_demo_content(
             {
                 'case': 'snia-like',
                 'description': 'Type Ia supernovae are thermonuclear explosions of white dwarf stars. Notice the smooth light curve and characteristic color evolution from blue to red over ~40 days.',
-                'key_features': 'Fast rise (~15-20 days), characteristic color evolution, found in various galaxy types',
+                'key_features': 'Smooth light curve evolution, second peak in r, found in various galaxy types',
                 'learning_points': [
                     'Type Ia SNe typically have fast rise times (~15-20 days)',
-                    'They show characteristic color evolution from blue to red',
+                    'Show second brightening at red wavelengths (ZTF-r)',
                     'Often found in spiral galaxy arms or elliptical galaxies',
                     'Used as "standard candles" for measuring cosmic distances',
                     'Peak absolute magnitude around -19.3 in V-band'
                 ],
                 'advanced_features': [
-                    'Look for pre-explosion detection in host galaxy',
-                    'Check for presence of hydrogen lines (should be absent)',
-                    'Monitor for late-time nebular phase (~100+ days)'
+                 #   'Look for pre-explosion detection in host galaxy',
+                 #   'Check for presence of hydrogen lines (should be absent)',
+                 #   'Monitor for late-time nebular phase (~100+ days)'
                 ],
                 'science_tags': ['snia-like', 'thermonuclear', 'standard-candle'],
-                'photometry_tags': ['fast-rise', 'blue-to-red', 'smooth-decline'],
+                'photometry_tags': ['fast-rise', 'red-bump', 'smooth-decline'],
                 'spectra_tags': ['no-hydrogen', 'silicon-lines', 'nebular-phase'],
                 'host_tags': ['various-hosts', 'spiral-arm', 'elliptical-ok'],
                 'observing_priority': 'high',
-                'target_recommendation': 'Excellent target - track color evolution and get spectrum'
+                'target_recommendation': 'Good target for cosmology'
             },
             {
                 'case': 'ccsn-like', 
-                'description': 'Core-collapse supernovae result from massive stars (>8 solar masses) reaching the end of their lives. Note the plateau phase in Type IIP and evidence of hydrogen.',
-                'key_features': 'Plateau phase (~100 days), hydrogen signatures, star-forming regions',
+                'description': 'Core-collapse supernovae are the explosions of massive stars (>8 solar masses). Their light curves are substantially more diverse than SNe Ia.',
+                'key_features': 'Slower rise and decline compared to SNe Ia, typically found in spiral galaxies and star-forming regions of a galaxy',
                 'learning_points': [
                     'Core-collapse SNe come from massive stars (>8 solar masses)',
-                    'Type IIP shows a distinctive plateau phase lasting ~100 days',
-                    'Often shows hydrogen lines in spectra (Type II)',
                     'Typically found in star-forming regions of spiral galaxies',
                     'More diverse light curve shapes than Type Ia'
                 ],
                 'advanced_features': [
-                    'Monitor for shock breakout in early phases',
-                    'Look for circumstellar material interaction',
-                    'Track plateau duration and decline rate'
+                  #  'Monitor for shock breakout in early phases',
+                  #  'Look for circumstellar material interaction',
+                  #  'Track plateau duration and decline rate'
                 ],
                 'science_tags': ['ccsn-like', 'core-collapse', 'massive-star'],
                 'photometry_tags': ['plateau-phase', 'slow-decline', 'red-colors'],
                 'spectra_tags': ['hydrogen-lines', 'balmer-series', 'metal-lines'],
                 'host_tags': ['spiral-galaxy', 'star-forming', 'hii-regions'],
                 'observing_priority': 'high',
-                'target_recommendation': 'Priority target - monitor plateau and get early spectrum'
+                'target_recommendation': 'Priority target - monitor evolution and get early spectrum'
             },
             {
                 'case': 'long-lived',
-                'description': 'Long-lived transients remain active for months to years, much longer than typical supernovae. These may be tidal disruption events or AGN flares.',
-                'key_features': 'Extended duration (months-years), nuclear location, complex light curves',
+                'description': 'Long-lived transients remain active for months to years, much longer than typical supernovae. This can be the result of the explosion colliding with surrounding circumstellar material (CSM).',
+                'key_features': 'Extended duration (months-years), bumpy/multi-peaked light curves',
                 'learning_points': [
+                    'Typically core-collapse supernovae',
+                    'Rare: many papers are written about single objects!',
                     'Long-lived transients can last months to years',
-                    'May be tidal disruption events (stars torn apart by black holes)',
-                    'Could also be AGN variability or superluminous supernovae',
-                    'Often located in galaxy centers or nuclei',
-                    'Require long-term monitoring to understand'
+                    'Caused by neutron star engines or long-lived interaction with surrounding material',
                 ],
                 'advanced_features': [
-                    'Check for X-ray and radio counterparts',
-                    'Monitor for periodic or quasi-periodic behavior',
-                    'Look for broad emission line features'
+                 #   'Check for X-ray and radio counterparts',
+                 #   'Monitor for periodic or quasi-periodic behavior',
+                 #   'Look for broad emission line features'
                 ],
                 'science_tags': ['long-lived', 'tde-candidate', 'agn-flare'],
                 'photometry_tags': ['extended-duration', 'complex-lc', 'multiple-peaks'],
                 'spectra_tags': ['broad-lines', 'coronal-lines', 'bowen-fluorescence'],
                 'host_tags': ['nuclear-location', 'early-type', 'massive-bh'],
                 'observing_priority': 'medium',
-                'target_recommendation': 'Long-term monitoring target - needs sustained follow-up'
+                'target_recommendation': 'Long-term monitoring target - continuous follow-up is needed'
             },
             {
                 'case': 'anomalous',
-                'description': 'Anomalous transients have unusual properties that don\'t fit standard classifications. These are exciting because they may represent new physics!',
-                'key_features': 'Unusual properties, requires investigation, potential new physics',
+                'description': 'Anomalous transients have unusual properties that don\'t fit standard classifications. These are exciting because they may represent poorly-understood stellar or explosion properties',
+                'key_features': 'Unusual color or brightness evolution (very fast/slow, bright/dim)',
                 'learning_points': [
                     'Anomalous events don\'t fit standard supernova templates',
                     'May be rare event types like pair-instability SNe or kilonovae',
                     'Could be instrumental artifacts or foreground variables',
                     'Often require detailed follow-up observations',
-                    'These discoveries advance our understanding of the universe'
+                    'Very high-priority targets! These are needle-in-a-haystack discoveries',
                 ],
                 'advanced_features': [
-                    'Rule out instrumental or calibration issues',
-                    'Check for counterparts across electromagnetic spectrum',
-                    'Compare with known exotic transient classes'
+                    #'Rule out instrumental or calibration issues',
+                   # 'Check for counterparts across electromagnetic spectrum',
+                   # 'Compare with known exotic transient classes'
                 ],
                 'science_tags': ['anomalous', 'unusual', 'exotic'],
                 'photometry_tags': ['atypical-lc', 'unexpected-colors', 'rare-behavior'],
                 'spectra_tags': ['unusual-lines', 'unknown-features', 'needs-analysis'],
                 'host_tags': ['various-hosts', 'unusual-environment', 'needs-study'],
                 'observing_priority': 'urgent',
-                'target_recommendation': 'URGENT - Rare discovery! Get all available follow-up'
+                'target_recommendation': 'Potentially rare discovery! Target immediately'
             }
         ]
         
