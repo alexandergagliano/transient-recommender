@@ -3448,6 +3448,9 @@ async function startDemoInstant() {
             return;
         }
         
+        // Log that function is called
+        console.log('✅ startDemoInstant() called successfully!');
+        
         // Show skill level selection first
         console.log('📋 About to show skill level selection...');
         console.log('📋 Calling showSkillLevelSelection()...');
@@ -3458,116 +3461,22 @@ async function startDemoInstant() {
         console.error('❌ Failed to start instant demo:', error);
         console.error('🔍 Error details:', error.stack);
         showToast('Failed to start instant demo - check console for details', 'error');
+        alert('Demo failed! Error: ' + error.message);
     }
 }
 
 function showSkillLevelSelection() {
     console.log('🎯 showSkillLevelSelection function called');
-    console.log('🎯 Creating skill level modal HTML...');
     
-    const skillModalHtml = `
-        <div class="modal fade" id="skillLevelModal" tabindex="-1" aria-labelledby="skillLevelModalLabel" aria-hidden="true" 
-             data-bs-backdrop="static" data-bs-keyboard="false">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header bg-primary text-white">
-                        <h4 class="modal-title" id="skillLevelModalLabel">
-                            <i class="fas fa-graduation-cap"></i> Welcome to the Transient Classification System!
-                        </h4>
-                    </div>
-                    <div class="modal-body text-center p-5">
-                        <h5 class="mb-4">What's your experience level with time-domain astrophysics?</h5>
-                        <p class="text-muted mb-4">This helps us customize the tutorial to your background.</p>
-                        
-                        <div class="row justify-content-center">
-                            <div class="col-md-5 mb-3">
-                                <button class="btn btn-outline-primary btn-lg w-100 h-100 skill-level-btn" data-level="beginner">
-                                    <div class="p-3">
-                                        <i class="fas fa-seedling fa-2x mb-3 d-block"></i>
-                                        <h6>I'm new to time-domain astrophysics</h6>
-                                        <small class="text-muted">
-                                            Start with basics: light curves, host galaxies, and astronomical classifications
-                                        </small>
-                                    </div>
-                                </button>
-                            </div>
-                            <div class="col-md-5 mb-3">
-                                <button class="btn btn-outline-success btn-lg w-100 h-100 skill-level-btn" data-level="expert">
-                                    <div class="p-3">
-                                        <i class="fas fa-microscope fa-2x mb-3 d-block"></i>
-                                        <h6>I study time-domain astrophysics professionally</h6>
-                                        <small class="text-muted">
-                                            Skip basics, focus on classification system and annotation tools
-                                        </small>
-                                    </div>
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div class="mt-4">
-                            <small class="text-muted">
-                                <i class="fas fa-info-circle"></i> 
-                                You can always change this later or restart the tutorial
-                            </small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <style>
-        .skill-level-btn {
-            transition: all 0.3s ease;
-            border: 2px solid;
-            min-height: 200px;
-        }
-        .skill-level-btn:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-        }
-        .skill-level-btn[data-level="beginner"]:hover {
-            border-color: #0d6efd;
-            background-color: rgba(13, 110, 253, 0.1);
-        }
-        .skill-level-btn[data-level="expert"]:hover {
-            border-color: #198754;
-            background-color: rgba(25, 135, 84, 0.1);
-        }
-        </style>
-    `;
+    // Simple test first - just show an alert with buttons
+    const userChoice = confirm('Demo Skill Level:\n\nOK = I\'m new to time-domain astrophysics\nCancel = I study time-domain astrophysics professionally');
     
-    console.log('🎯 Adding modal HTML to document...');
-    document.body.insertAdjacentHTML('beforeend', skillModalHtml);
+    const skillLevel = userChoice ? 'beginner' : 'expert';
+    console.log(`🎯 User selected skill level: ${skillLevel}`);
+    alert(`You selected: ${skillLevel} level. Starting demo...`);
     
-    console.log('🎯 Creating Bootstrap modal...');
-    const modal = new bootstrap.Modal(document.getElementById('skillLevelModal'), {
-        backdrop: 'static',
-        keyboard: false
-    });
-    
-    console.log('🎯 Showing skill level selection modal...');
-    modal.show();
-    console.log('🎯 Modal.show() called');
-    
-    // Handle skill level selection
-    console.log('🎯 Setting up skill level button handlers...');
-    document.querySelectorAll('.skill-level-btn').forEach(btn => {
-        console.log(`🎯 Found skill level button: ${btn.dataset.level}`);
-        btn.addEventListener('click', function() {
-            const level = this.dataset.level;
-            console.log(`🎯 User selected skill level: ${level}`);
-            
-            modal.hide();
-            
-            // Remove modal after hiding
-            document.getElementById('skillLevelModal').addEventListener('hidden.bs.modal', function () {
-                console.log(`🎯 Skill level modal hidden, starting demo with level: ${level}`);
-                this.remove();
-                startDemoWithLevel(level);
-            });
-        });
-    });
-    console.log('🎯 Skill level button handlers set up');
+    // Start demo with selected level
+    startDemoWithLevel(skillLevel);
 }
 
 function startDemoWithLevel(skillLevel) {
