@@ -259,6 +259,25 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Make toggleRealtimeMode globally available
     window.toggleRealtimeMode = toggleRealtimeMode;
+    
+    // Setup layout toggle
+    const layoutRadios = document.querySelectorAll('input[name="displayLayout"]');
+    layoutRadios.forEach(radio => {
+        radio.addEventListener('change', handleLayoutChange);
+    });
+    
+    // Setup mode toggle (recommender vs slack)
+    const modeRadios = document.querySelectorAll('input[name="recommendationMode"]');
+    modeRadios.forEach(radio => {
+        radio.addEventListener('change', handleModeChange);
+    });
+    
+    // Setup slack lookback slider
+    const slackLookbackRange = document.getElementById('slackLookbackRange');
+    if (slackLookbackRange) {
+        slackLookbackRange.addEventListener('input', updateSlackLookbackDisplay);
+        slackLookbackRange.addEventListener('change', updateRecommendations);
+    }
 });
 
 function applyPreferencesOnLoad() {
@@ -293,6 +312,24 @@ function applyPreferencesOnLoad() {
     const obsDaysInput = document.getElementById('obsConstraintDays');
     if (obsDaysInput && preferences.defaultObsDays) {
         obsDaysInput.value = preferences.defaultObsDays;
+    }
+    
+    // Apply display layout preference
+    const layoutRadios = document.querySelectorAll('input[name="displayLayout"]');
+    if (layoutRadios.length && preferences.displayLayout) {
+        layoutRadios.forEach(radio => {
+            radio.checked = radio.value === preferences.displayLayout;
+        });
+        // Apply the layout class if compact
+        if (preferences.displayLayout === 'compact') {
+            document.body.classList.add('compact-layout');
+            // Delay table population until recommendations are loaded
+            setTimeout(() => {
+                if (currentRecommendations.length > 0) {
+                    populateCompactTable();
+                }
+            }, 100);
+        }
     }
 }
 
@@ -608,14 +645,26 @@ async function loadRecommendations() {
         const isRealtimeMode = realtimeToggle?.checked || false;
         const recentDays = recentDaysSelect?.value || '7';
 
+        // Check if in Slack mode
+        const slackModeRadio = document.getElementById('slackMode');
+        const isSlackMode = slackModeRadio && slackModeRadio.checked;
+        const slackLookbackDays = document.getElementById('slackLookbackRange')?.value || '30';
+        
         let apiUrl = `/api/recommendations?science_case=${currentScienceCase}&count=10`;
-        if (telescope) apiUrl += `&obs_telescope=${telescope}`;
-        if (days) apiUrl += `&obs_days=${days}`;
-        if (magLimit) apiUrl += `&obs_mag_limit=${magLimit}`;
-        if (startZtfid) apiUrl += `&start_ztfid=${startZtfid}`;
-        if (isRealtimeMode) {
-            apiUrl += `&realtime_mode=true&recent_days=${recentDays}`;
-            console.log(`Real-time mode: filtering to last ${recentDays} days`);
+        
+        if (isSlackMode) {
+            apiUrl += `&slack_mode=true&slack_lookback_days=${slackLookbackDays}`;
+            console.log(`Slack mode: looking back ${slackLookbackDays} days`);
+        } else {
+            // Recommender mode parameters
+            if (telescope) apiUrl += `&obs_telescope=${telescope}`;
+            if (days) apiUrl += `&obs_days=${days}`;
+            if (magLimit) apiUrl += `&obs_mag_limit=${magLimit}`;
+            if (startZtfid) apiUrl += `&start_ztfid=${startZtfid}`;
+            if (isRealtimeMode) {
+                apiUrl += `&realtime_mode=true&recent_days=${recentDays}`;
+                console.log(`Real-time mode: filtering to last ${recentDays} days`);
+            }
         }
 
         console.log('Fetching recommendations from:', apiUrl);
@@ -706,7 +755,29 @@ async function loadRecommendations() {
         // If no recommendations left, show message
         if (currentRecommendations.length === 0) {
             console.log('No recommendations returned from API');
-            showToast('No more unvoted objects available!', 'info');
+            
+            // Check if in Slack mode for different message
+            const slackModeRadio = document.getElementById('slackMode');
+            const isSlackMode = slackModeRadio && slackModeRadio.checked;
+            
+            if (isSlackMode) {
+                // Show Slack-specific message
+                document.getElementById('no-more-slack-recommendations').style.display = 'block';
+                document.getElementById('no-more-recommendations').style.display = 'none';
+                showToast("You've reached the end of ZAPSTER's recommendations!", 'info');
+            } else {
+                // Show regular message
+                document.getElementById('no-more-recommendations').style.display = 'block';
+                document.getElementById('no-more-slack-recommendations').style.display = 'none';
+                showToast('No more unvoted objects available!', 'info');
+            }
+            
+            // Hide the current object container
+            const objectContainer = document.getElementById('current-object-container');
+            if (objectContainer) {
+                objectContainer.style.display = 'none';
+            }
+            
             return;
         }
         
@@ -717,6 +788,11 @@ async function loadRecommendations() {
         const currentObject = getCurrentObject();
         if (currentObject) {
             refreshExplanation(currentObject);
+        }
+        
+        // Update compact table if in compact mode
+        if (document.body.classList.contains('compact-layout')) {
+            populateCompactTable();
         }
         
         showToast(`Loaded ${currentRecommendations.length} recommendations`, 'success');
@@ -4825,5 +4901,233 @@ async function refreshExplanation(ztfid) {
         }
     } catch (error) {
         console.error('Error refreshing explanation:', error);
+    }
+}
+
+/**
+ * Handle layout change between default and compact views
+ */
+function handleLayoutChange(event) {
+    const layout = event.target.value;
+    
+    if (layout === 'compact') {
+        // Switch to compact view
+        document.body.classList.add('compact-layout');
+        populateCompactTable();
+    } else {
+        // Switch to default view
+        document.body.classList.remove('compact-layout');
+    }
+    
+    // Save preference
+    const preferences = JSON.parse(localStorage.getItem('userPreferences') || '{}');
+    preferences.displayLayout = layout;
+    localStorage.setItem('userPreferences', JSON.stringify(preferences));
+}
+
+/**
+ * Populate the compact table with recommendations
+ */
+function populateCompactTable() {
+    const tableBody = document.getElementById('compact-table-body');
+    const pagination = document.getElementById('compact-pagination');
+    
+    if (!tableBody || !currentRecommendations.length) return;
+    
+    // Clear existing content
+    tableBody.innerHTML = '';
+    pagination.innerHTML = '';
+    
+    // Items per page
+    const itemsPerPage = 20;
+    const totalPages = Math.ceil(currentRecommendations.length / itemsPerPage);
+    let currentPage = 1;
+    
+    // Function to render a page
+    function renderPage(page) {
+        tableBody.innerHTML = '';
+        const start = (page - 1) * itemsPerPage;
+        const end = Math.min(start + itemsPerPage, currentRecommendations.length);
+        
+        for (let i = start; i < end; i++) {
+            const obj = currentRecommendations[i];
+            const row = createCompactTableRow(obj, i + 1);
+            tableBody.appendChild(row);
+        }
+        
+        updatePagination(page, totalPages);
+    }
+    
+    // Function to update pagination
+    function updatePagination(current, total) {
+        pagination.innerHTML = '';
+        
+        // Previous button
+        const prevLi = document.createElement('li');
+        prevLi.className = `page-item ${current === 1 ? 'disabled' : ''}`;
+        prevLi.innerHTML = `<a class="page-link" href="#" data-page="${current - 1}">Previous</a>`;
+        pagination.appendChild(prevLi);
+        
+        // Page numbers
+        for (let i = 1; i <= total; i++) {
+            if (i === 1 || i === total || (i >= current - 2 && i <= current + 2)) {
+                const li = document.createElement('li');
+                li.className = `page-item ${i === current ? 'active' : ''}`;
+                li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
+                pagination.appendChild(li);
+            } else if (i === current - 3 || i === current + 3) {
+                const li = document.createElement('li');
+                li.className = 'page-item disabled';
+                li.innerHTML = '<span class="page-link">...</span>';
+                pagination.appendChild(li);
+            }
+        }
+        
+        // Next button
+        const nextLi = document.createElement('li');
+        nextLi.className = `page-item ${current === total ? 'disabled' : ''}`;
+        nextLi.innerHTML = `<a class="page-link" href="#" data-page="${current + 1}">Next</a>`;
+        pagination.appendChild(nextLi);
+        
+        // Add click handlers
+        pagination.querySelectorAll('a.page-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = parseInt(e.target.dataset.page);
+                if (page >= 1 && page <= total) {
+                    currentPage = page;
+                    renderPage(page);
+                }
+            });
+        });
+    }
+    
+    // Initial render
+    renderPage(currentPage);
+}
+
+/**
+ * Create a compact table row for an object
+ */
+function createCompactTableRow(obj, index) {
+    const row = document.createElement('tr');
+    
+    // Index
+    const indexCell = document.createElement('th');
+    indexCell.scope = 'row';
+    indexCell.textContent = index;
+    row.appendChild(indexCell);
+    
+    // Object Name with ALeRCE link
+    const nameCell = document.createElement('td');
+    const nameLink = document.createElement('a');
+    nameLink.href = `https://alerce.online/object/${obj.ztfid}`;
+    nameLink.target = '_blank';
+    nameLink.className = 'compact-object-link';
+    nameLink.textContent = obj.ztfid;
+    nameCell.appendChild(nameLink);
+    row.appendChild(nameCell);
+    
+    // Coordinates
+    const coordsCell = document.createElement('td');
+    coordsCell.className = 'compact-coordinates';
+    if (obj.ra && obj.dec) {
+        coordsCell.textContent = `${obj.ra.toFixed(5)}, ${obj.dec.toFixed(5)}`;
+    } else {
+        coordsCell.textContent = 'N/A';
+    }
+    row.appendChild(coordsCell);
+    
+    // Classification
+    const classCell = document.createElement('td');
+    classCell.className = 'compact-classification';
+    classCell.textContent = obj.classification || 'Unknown';
+    row.appendChild(classCell);
+    
+    // Redshift
+    const redshiftCell = document.createElement('td');
+    redshiftCell.className = 'compact-redshift';
+    redshiftCell.textContent = obj.redshift ? obj.redshift.toFixed(4) : 'N/A';
+    row.appendChild(redshiftCell);
+    
+    // Actions
+    const actionsCell = document.createElement('td');
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'compact-action-buttons';
+    
+    // Like button
+    const likeBtn = document.createElement('button');
+    likeBtn.className = 'btn btn-sm btn-outline-success';
+    likeBtn.innerHTML = '<i class="fas fa-thumbs-up"></i>';
+    likeBtn.title = 'Like';
+    likeBtn.onclick = () => handleVote(obj.ztfid, 'like');
+    
+    // Dislike button
+    const dislikeBtn = document.createElement('button');
+    dislikeBtn.className = 'btn btn-sm btn-outline-danger';
+    dislikeBtn.innerHTML = '<i class="fas fa-thumbs-down"></i>';
+    dislikeBtn.title = 'Dislike';
+    dislikeBtn.onclick = () => handleVote(obj.ztfid, 'dislike');
+    
+    // Target button
+    const targetBtn = document.createElement('button');
+    targetBtn.className = 'btn btn-sm btn-outline-warning';
+    targetBtn.innerHTML = '<i class="fas fa-crosshairs"></i>';
+    targetBtn.title = 'Target';
+    targetBtn.onclick = () => handleVote(obj.ztfid, 'target');
+    
+    actionsDiv.appendChild(likeBtn);
+    actionsDiv.appendChild(dislikeBtn);
+    actionsDiv.appendChild(targetBtn);
+    actionsCell.appendChild(actionsDiv);
+    row.appendChild(actionsCell);
+    
+    // Add data attributes for easy access
+    row.dataset.ztfid = obj.ztfid;
+    
+    return row;
+}
+
+/**
+ * Handle mode change between Recommender and Slack modes
+ */
+function handleModeChange(event) {
+    const mode = event.target.value;
+    
+    // Toggle visibility of mode-specific sections
+    const constraintsSection = document.getElementById('constraintsSection');
+    const featureExtractionSection = document.getElementById('featureExtractionSection');
+    const slackModeControls = document.getElementById('slackModeControls');
+    
+    if (mode === 'slack') {
+        // Hide recommender-specific sections
+        if (constraintsSection) constraintsSection.style.display = 'none';
+        if (featureExtractionSection) featureExtractionSection.style.display = 'none';
+        
+        // Show slack-specific controls
+        if (slackModeControls) slackModeControls.style.display = 'block';
+    } else {
+        // Show recommender-specific sections
+        if (constraintsSection) constraintsSection.style.display = 'block';
+        if (featureExtractionSection) featureExtractionSection.style.display = 'block';
+        
+        // Hide slack-specific controls
+        if (slackModeControls) slackModeControls.style.display = 'none';
+    }
+    
+    // Reload recommendations with new mode
+    updateRecommendations();
+}
+
+/**
+ * Update the slack lookback display value
+ */
+function updateSlackLookbackDisplay() {
+    const range = document.getElementById('slackLookbackRange');
+    const display = document.getElementById('slackLookbackDisplay');
+    
+    if (range && display) {
+        const days = range.value;
+        display.textContent = `${days} day${days !== '1' ? 's' : ''}`;
     }
 }

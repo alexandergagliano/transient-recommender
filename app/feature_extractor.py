@@ -7,7 +7,8 @@ from astropy.time import Time
 from astropy import units as u
 import logging
 import time
-import signal
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError, as_completed
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from multiprocessing import Pool, cpu_count
@@ -18,6 +19,7 @@ from tqdm import tqdm
 from scipy.interpolate import interp1d, UnivariateSpline
 from scipy.signal import find_peaks
 import json
+import traceback
 
 from . import models
 from .filter_manager import filter_manager
@@ -33,422 +35,277 @@ except ImportError:
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
+def execute_with_timeout(func, args=(), kwargs={}, timeout_seconds=30):
+    """Execute a function with a timeout using threading instead of signals."""
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(func, *args, **kwargs)
+        try:
+            return future.result(timeout=timeout_seconds)
+        except FutureTimeoutError:
+            # The thread will continue running but we abandon waiting for it
+            raise TimeoutError(f"Function execution timed out after {timeout_seconds} seconds")
+
+class ALeRCEFetcher:
+    """
+    Fetcher for recent transients from ALeRCE API.
+    Much more reliable than ANTARES for bulk operations.
+    """
+    BASE_URL = "https://api.alerce.online/ztf/v1"
+
+    def __init__(self, days=20, max_pages=10, page_size=1000, max_threads=8):
+        self.days = days
+        self.max_pages = max_pages
+        self.page_size = page_size
+        self.max_threads = max_threads
+        self.mjd_start, self.mjd_end = self._get_mjd_range()
+        self.logger = logging.getLogger(__name__)
+
+    def _get_mjd_range(self):
+        """Convert date range to MJD for ALeRCE API"""
+        now = datetime.utcnow()
+        start = now - timedelta(days=self.days)
+        return self._to_mjd(start), self._to_mjd(now)
+
+    def _to_mjd(self, dt):
+        """Convert datetime to MJD"""
+        return dt.timestamp() / 86400.0 + 40587
+
+    def fetch_recent_oids(self):
+        """Quickly fetch all unique object IDs with detections in the date range."""
+        self.logger.info(f"Fetching recent objects from ALeRCE (last {self.days} days)")
+        self.logger.info(f"MJD range: {self.mjd_start:.2f} to {self.mjd_end:.2f}")
+        
+        oids = set()
+        for page in range(1, self.max_pages + 1):
+            try:
+                self.logger.debug(f"Fetching page {page}/{self.max_pages}")
+                resp = requests.get(
+                    f"{self.BASE_URL}/objects",
+                    params={
+                        "first_mjd__gte": self.mjd_start,
+                        "first_mjd__lte": self.mjd_end,
+                        "page": page,
+                        "page_size": self.page_size,
+                    },
+                    timeout=30
+                )
+                
+                if resp.status_code != 200:
+                    self.logger.warning(f"Page {page} returned status {resp.status_code}")
+                    break
+                    
+                data = resp.json()
+                results = data.get("results", [])
+                if not results:
+                    self.logger.info(f"No more results at page {page}")
+                    break
+                    
+                page_oids = set()
+                for obj in results:
+                    if "oid" in obj:
+                        page_oids.add(obj["oid"])
+                
+                oids.update(page_oids)
+                self.logger.info(f"Page {page}: +{len(page_oids)} objects (total: {len(oids)})")
+                
+                # Stop if we got fewer results than page size (last page)
+                if len(results) < self.page_size:
+                    self.logger.info(f"Reached end of results at page {page}")
+                    break
+                    
+            except Exception as e:
+                self.logger.error(f"Error fetching page {page}: {e}")
+                break
+        
+        self.logger.info(f"Found {len(oids)} unique objects with recent detections")
+        return list(oids)
+
+    def _get_object_info(self, oid):
+        """Get object classification and basic info"""
+        try:
+            resp = requests.get(f"{self.BASE_URL}/objects/{oid}", timeout=15)
+            if resp.status_code != 200:
+                return None
+            
+            data = resp.json()
+            
+            # Extract key information
+            info = {
+                'oid': oid,
+                'ra': data.get('meanra'),
+                'dec': data.get('meandec'),
+                'classification': data.get('classifier', {}),
+                'n_detections': data.get('ndet', 0),
+                'first_mjd': data.get('firstmjd'),
+                'last_mjd': data.get('lastmjd')
+            }
+            
+            return info
+            
+        except Exception as e:
+            self.logger.debug(f"Error getting info for {oid}: {e}")
+            return None
+
+    def _is_interesting_transient(self, obj_info):
+        """
+        Determine if object is an interesting transient for our purposes.
+        Focus on supernovae and other transients, skip variables.
+        """
+        if not obj_info:
+            return False
+            
+        classification = obj_info.get('classification', {})
+        classifier = classification.get('classifier', '')
+        
+        # Accept SN classifications
+        if classifier in ['SN', 'SNIa', 'SNIbc', 'SNII']:
+            return True
+            
+        # Accept high-confidence transient classifications
+        prob = classification.get('probability', 0)
+        if classifier in ['Transient', 'Unknown'] and prob > 0.7:
+            return True
+            
+        # Require minimum number of detections
+        if obj_info.get('n_detections', 0) < 5:
+            return False
+            
+        # Skip obvious variables
+        if classifier in ['Variable', 'Periodic', 'RRLyr', 'EclBin']:
+            return False
+            
+        return True
+
+    def get_recent_transients(self):
+        """
+        Get recent interesting transients with their basic info.
+        Returns a list of objects suitable for feature extraction.
+        """
+        # Step 1: Get all recent object IDs
+        all_oids = self.fetch_recent_oids()
+        
+        if not all_oids:
+            self.logger.warning("No recent objects found")
+            return []
+        
+        # Limit to reasonable number for processing
+        if len(all_oids) > 500:
+            self.logger.info(f"Limiting to 500 most recent objects (found {len(all_oids)})")
+            all_oids = all_oids[:500]
+        
+        # Step 2: Get object info in parallel
+        self.logger.info(f"Getting classification info for {len(all_oids)} objects...")
+        
+        interesting_objects = []
+        
+        def process_oid(oid):
+            obj_info = self._get_object_info(oid)
+            if obj_info and self._is_interesting_transient(obj_info):
+                return obj_info
+            return None
+        
+        with ThreadPoolExecutor(max_workers=self.max_threads) as executor:
+            future_to_oid = {executor.submit(process_oid, oid): oid for oid in all_oids}
+            
+            completed = 0
+            for future in as_completed(future_to_oid):
+                completed += 1
+                if completed % 50 == 0:
+                    self.logger.info(f"Processed {completed}/{len(all_oids)} objects...")
+                
+                result = future.result()
+                if result:
+                    interesting_objects.append(result)
+        
+        self.logger.info(f"Found {len(interesting_objects)} interesting transients")
+        
+        # Sort by last detection time (most recent first)
+        interesting_objects.sort(key=lambda x: x.get('last_mjd', 0), reverse=True)
+        
+        return interesting_objects
+
 def get_daily_objects(lookback_days: float = 20.0, lookback_t_first: float = 500, test_mode: bool = False) -> Optional[pd.DataFrame]:
     """
-    Get objects with detections in the last N days.
+    Get objects with detections in the last N days using ALeRCE API.
     
-    This queries the Antares API for recent objects.
-    If Antares is not available, returns None to allow the system to continue.
+    This replaces the unreliable ANTARES approach with ALeRCE bulk queries.
     
     Args:
         lookback_days: Number of days to look back
         lookback_t_first: Not used in current implementation
-        test_mode: If True, skip Antares query entirely and return None gracefully
+        test_mode: If True, skip query entirely and return None gracefully
     """
-    logger.info(f"Getting objects with detections in the last {lookback_days} days (test_mode={test_mode})")
+    logger.info(f"Getting objects with detections in the last {lookback_days} days using ALeRCE (test_mode={test_mode})")
     
     if test_mode:
-        logger.info("Test mode enabled - skipping Antares query")
+        logger.info("Test mode enabled - skipping ALeRCE query")
         return None
     
     try:
-        # Check if antares_client is available 
-        if antares_client is None:
-            logger.warning("antares_client not installed - feature extraction will skip new object discovery")
+        # Initialize ALeRCE fetcher
+        fetcher = ALeRCEFetcher(days=lookback_days, max_pages=5, max_threads=8)
+        
+        # Get recent transients
+        transients = fetcher.get_recent_transients()
+        
+        if not transients:
+            logger.warning("No interesting transients found in ALeRCE")
             return None
         
-        try:
-            logger.debug(f"Successfully imported antares_client version: {getattr(antares_client, '__version__', 'unknown')}")
-        except ImportError as e:
-            logger.warning(f"antares_client not installed - feature extraction will skip new object discovery: {e}")
-            return None
-        except Exception as e:
-            logger.warning(f"Error importing antares_client - feature extraction will skip new object discovery: {e}")
-            return None
-        
-        # Test ANTARES API responsiveness with a quick timeout
-        logger.info("Testing ANTARES API responsiveness...")
-        try:
-            
-            def timeout_handler(signum, frame):
-                raise TimeoutError("ANTARES API test timed out")
-            
-            # Set up a 15-second timeout for initial connectivity test
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(15)
-            
-            try:
-                # Very simple test query to check API responsiveness
-                test_query = {
-                    'query': {'match_all': {}},
-                    'size': 1
-                }
-                
-                test_results = search(test_query)
-                test_list = list(test_results)  # This triggers the actual API call
-                
-                logger.info(f"✓ ANTARES API test successful - API is responsive")
-                
-            finally:
-                # Cancel the alarm
-                signal.alarm(0)
-                
-        except TimeoutError:
-            logger.error("✗ ANTARES API is unresponsive (timed out in 15 seconds)")
-            logger.error("This is likely due to ANTARES server issues or network problems")
-            logger.info("Feature extraction will continue without new object discovery")
-            return None
-        except Exception as e:
-            logger.error(f"✗ ANTARES API test failed: {e}")
-            logger.info("Feature extraction will continue without new object discovery")
-            return None
-        
-        # Calculate time range
-        end_time = Time.now()
-        start_time = end_time - lookback_days * u.day
-        
-        logger.info(f"Querying Antares for objects detected between MJD {start_time.mjd:.1f} and {end_time.mjd:.1f}")
-        logger.info(f"Using proper daily pagination to handle ANTARES timeouts")
-        
-        # ANTARES API bulk queries are experiencing major performance issues
-        # Implement proper daily pagination to query smaller time windows
-        
-        logger.warning("ANTARES API has known bulk query performance issues")
-        logger.info("Using daily pagination strategy to handle timeouts...")
-        
-        total_results = []
-        
-        # Split the time range into daily chunks for better timeout handling
-        time_chunk_days = 1.0  # Start with 1-day chunks
-        max_time_chunks = int(np.ceil(lookback_days / time_chunk_days))
-        
-        logger.info(f"Splitting {lookback_days} days into {max_time_chunks} chunks of {time_chunk_days} days each")
-        
-        for chunk_idx in range(max_time_chunks):
-            chunk_start_time = end_time - (chunk_idx + 1) * time_chunk_days * u.day
-            chunk_end_time = end_time - chunk_idx * time_chunk_days * u.day
-            
-            # Ensure we don't go beyond the original start time
-            if chunk_start_time.mjd < start_time.mjd:
-                chunk_start_time = start_time
-            
-            logger.info(f"Processing time chunk {chunk_idx + 1}/{max_time_chunks}: MJD {chunk_start_time.mjd:.2f} to {chunk_end_time.mjd:.2f}")
-            
-            # Try multiple batch sizes for this time chunk
-            chunk_strategies = [
-                {"name": "Medium batch", "size": 100, "timeout": 30, "max_attempts": 2},
-                {"name": "Small batch", "size": 50, "timeout": 20, "max_attempts": 3},
-                {"name": "Mini batch", "size": 20, "timeout": 15, "max_attempts": 3},
-                {"name": "Micro batch", "size": 10, "timeout": 10, "max_attempts": 2},
-            ]
-            
-            chunk_results = []
-            chunk_success = False
-            
-            for strategy in chunk_strategies:
-                if chunk_success:
-                    break
-                    
-                logger.info(f"  Trying {strategy['name']} for this time chunk")
-                
-                for attempt in range(strategy['max_attempts']):
-                    try:
-                        def strategy_timeout_handler(signum, frame):
-                            raise TimeoutError(f"{strategy['name']} attempt {attempt+1} timed out")
-                        
-                        signal.signal(signal.SIGALRM, strategy_timeout_handler)
-                        signal.alarm(strategy['timeout'])
-                        
-                        try:
-                            # Proper time-based query for this chunk
-                            chunk_query = {
-                                'query': {
-                                    'bool': {
-                                        'must': [
-                                            {
-                                                'range': {
-                                                    'properties.newest_alert_observation_time': {
-                                                        'gte': chunk_start_time.mjd,
-                                                        'lte': chunk_end_time.mjd
-                                                    }
-                                                }
-                                            },
-                                            {
-                                                'range': {
-                                                    'properties.ztf_object_id': {
-                                                        'gte': 'ZTF18',  # All ZTF objects (not just 2024)
-                                                        'lte': 'ZTF99'
-                                                    }
-                                                }
-                                            }
-                                        ]
-                                    }
-                                },
-                                'sort': [
-                                    {'properties.newest_alert_observation_time': {'order': 'desc'}}
-                                ],
-                                'size': strategy['size'],
-                                'from': 0  # Start from beginning for each time chunk
-                            }
-                            
-                            logger.info(f"    Attempt {attempt+1}: querying {strategy['size']} objects with {strategy['timeout']}s timeout")
-                            results = search(chunk_query)
-                            page_list = list(results) if results else []
-                            
-                            logger.info(f"    Retrieved {len(page_list)} objects for this time chunk")
-                            
-                            if len(page_list) > 0:
-                                chunk_results.extend(page_list)
-                                chunk_success = True
-                                logger.info(f"    ✓ Success with {strategy['name']} for time chunk!")
-                                
-                                # Try to get more results with pagination within this strategy
-                                page_size = strategy['size']
-                                from_offset = page_size
-                                max_pages = 5  # Limit pagination to prevent infinite loops
-                                
-                                for page in range(max_pages):
-                                    try:
-                                        # Set a shorter timeout for pagination
-                                        signal.alarm(strategy['timeout'] // 2)
-                                        
-                                        paginated_query = chunk_query.copy()
-                                        paginated_query['from'] = from_offset
-                                        
-                                        logger.info(f"    Fetching page {page + 2} (from offset {from_offset})")
-                                        page_results = search(paginated_query)
-                                        page_list = list(page_results) if page_results else []
-                                        
-                                        if len(page_list) == 0:
-                                            logger.info(f"    No more results on page {page + 2} - stopping pagination")
-                                            break
-                                        
-                                        chunk_results.extend(page_list)
-                                        from_offset += page_size
-                                        logger.info(f"    Retrieved {len(page_list)} additional objects (total: {len(chunk_results)})")
-                                        
-                                    except (TimeoutError, Exception) as e:
-                                        logger.warning(f"    Pagination page {page + 2} failed: {e}")
-                                        break  # Stop pagination on error but keep chunk_results
-                                
-                                break  # Success with this strategy
-                            else:
-                                logger.info(f"    No results for attempt {attempt+1}")
-                                
-                            signal.alarm(0)
-                            
-                        except TimeoutError:
-                            signal.alarm(0)
-                            logger.warning(f"    Attempt {attempt+1} timed out")
-                            continue
-                        except Exception as e:
-                            signal.alarm(0)
-                            logger.warning(f"    Attempt {attempt+1} failed: {e}")
-                            continue
-                            
-                    except Exception as e:
-                        logger.error(f"Strategy setup failed: {e}")
-                        break
-                
-                if chunk_success:
-                    break  # Found results for this time chunk
-            
-            # Add chunk results to total
-            if chunk_results:
-                total_results.extend(chunk_results)
-                logger.info(f"Time chunk {chunk_idx + 1} yielded {len(chunk_results)} objects (total so far: {len(total_results)})")
-            else:
-                logger.warning(f"Time chunk {chunk_idx + 1} yielded no results")
-            
-            # Small delay between time chunks to be respectful to the API
-            if chunk_idx < max_time_chunks - 1:
-                time.sleep(0.5)
-            
-            # Stop early if we've reached the original start time
-            if chunk_start_time.mjd <= start_time.mjd:
-                logger.info("Reached original start time - stopping pagination")
-                break
-        
-        # Remove duplicates (objects might appear in multiple time chunks)
-        seen_ids = set()
-        deduplicated_results = []
-        for obj in total_results:
-            # Try to get a unique identifier
-            obj_id = None
-            if hasattr(obj, 'catalog_objects') and obj.catalog_objects:
-                if isinstance(obj.catalog_objects, list) and len(obj.catalog_objects) > 0:
-                    catalog_obj = obj.catalog_objects[0]
-                    if hasattr(catalog_obj, 'catalog_object_id'):
-                        obj_id = catalog_obj.catalog_object_id
-            
-            if obj_id and obj_id not in seen_ids:
-                seen_ids.add(obj_id)
-                deduplicated_results.append(obj)
-            elif not obj_id:
-                # If we can't get an ID, keep it (safer to have duplicates than miss objects)
-                deduplicated_results.append(obj)
-        
-        logger.info(f"Daily pagination complete: found {len(total_results)} total objects, {len(deduplicated_results)} unique objects")
-        
-        results_list = deduplicated_results
-        logger.info(f"ANTARES query result: {len(results_list)} objects found")
-        
-        if not results_list:
-            logger.warning(f"Daily pagination failed - trying fallback connectivity test...")
-            
-            # Try basic connectivity test as fallback
-            try:
-                from antares_client.search import get_by_ztf_object_id
-                test_obj = get_by_ztf_object_id('ZTF18aabtxvd')
-                if test_obj:
-                    logger.info("✓ ANTARES individual queries work")
-                    logger.warning("✗ But time-based bulk queries are currently failing")
-                else:
-                    logger.error("✗ Even individual queries failing")
-            except Exception as e:
-                logger.error(f"✗ Connectivity test failed: {e}")
-            
-            logger.warning(f"No new objects retrieved from ANTARES")
-            
-            logger.info("ANTARES infrastructure status:")
-            logger.info("✓ Individual object queries: Working")
-            logger.info("✗ Time-based bulk queries: Failing (even with daily pagination)")
-            logger.info("✗ New object discovery: Currently unavailable")
-            logger.info("")
-            logger.info("System behavior:")
-            logger.info("• Existing objects in database will continue to be processed")
-            logger.info("• Manual object addition via web interface still works")
-            logger.info("• Individual object lookups still function")
-            logger.info("• New object discovery will resume when ANTARES API improves")
-            
-            return None
-        
-        # Convert to DataFrame with improved debugging
+        # Convert to DataFrame format expected by the rest of the system
         objects_data = []
-        logger.info(f"Processing {len(results_list)} loci from Antares...")
         
-        for i, locus in enumerate(results_list):
-            try:
-                # Enhanced debugging for first few loci
-                if i < 3:
-                    logger.debug(f"=== Processing locus {i+1} ===")
-                    logger.debug(f"Locus type: {type(locus)}")
-                    logger.debug(f"Locus attributes: {sorted([attr for attr in dir(locus) if not attr.startswith('_')])}")
-                    
-                    if hasattr(locus, 'properties'):
-                        logger.debug(f"Properties: {locus.properties}")
-                    if hasattr(locus, 'catalog_objects'):
-                        logger.debug(f"Catalog objects type: {type(locus.catalog_objects)}")
-                        if locus.catalog_objects:
-                            logger.debug(f"Catalog objects content: {locus.catalog_objects}")
-                
-                # Try different ways to extract ZTFID - enhanced
-                ztfid = None
-                
-                # Method 1: From catalog_objects
-                if hasattr(locus, 'catalog_objects') and locus.catalog_objects:
-                    if isinstance(locus.catalog_objects, list) and len(locus.catalog_objects) > 0:
-                        catalog_obj = locus.catalog_objects[0]
-                        if hasattr(catalog_obj, 'catalog_object_id'):
-                            ztfid = catalog_obj.catalog_object_id
-                        elif isinstance(catalog_obj, dict):
-                            ztfid = catalog_obj.get('catalog_object_id')
-                    elif isinstance(locus.catalog_objects, dict):
-                        ztfid = locus.catalog_objects.get('catalog_object_id')
-                
-                # Method 2: From locus properties
-                if not ztfid and hasattr(locus, 'properties') and locus.properties:
-                    # Try multiple property names
-                    for prop_name in ['ztf_object_id', 'ztfid', 'object_id', 'name']:
-                        if prop_name in locus.properties:
-                            candidate_id = locus.properties[prop_name]
-                            if candidate_id and str(candidate_id).startswith('ZTF'):
-                                ztfid = candidate_id
-                                break
-                
-                # Method 3: Direct locus fields
-                if not ztfid:
-                    for attr_name in ['locus_id', 'object_id', 'name']:
-                        if hasattr(locus, attr_name):
-                            candidate_id = getattr(locus, attr_name)
-                            if candidate_id and str(candidate_id).startswith('ZTF'):
-                                ztfid = candidate_id
-                                break
-                
-                # Method 4: Check if there's a to_dict method
-                if not ztfid and hasattr(locus, 'to_dict'):
-                    try:
-                        locus_dict = locus.to_dict()
-                        for key in ['ztf_object_id', 'object_id', 'name', 'ztfid']:
-                            if key in locus_dict and str(locus_dict[key]).startswith('ZTF'):
-                                ztfid = locus_dict[key]
-                                break
-                    except Exception as e:
-                        logger.debug(f"Error calling to_dict(): {e}")
-                
-                if not ztfid:
-                    if i < 5:  # Only warn for first few failures
-                        logger.warning(f"Could not extract ZTFID from locus {i+1}")
-                        logger.debug(f"Available properties: {list(locus.properties.keys()) if hasattr(locus, 'properties') and locus.properties else 'No properties'}")
-                    continue
-                
-                # Ensure ZTFID looks like a ZTF ID
-                if not str(ztfid).startswith('ZTF'):
-                    if i < 5:
-                        logger.warning(f"Invalid ZTFID format: {ztfid}")
-                    continue
-                
-                # Enhanced coordinate extraction
-                ra = dec = None
-                
-                # Try direct attributes first
-                if hasattr(locus, 'ra'):
-                    ra = locus.ra
-                if hasattr(locus, 'dec'):
-                    dec = locus.dec
-                
-                # Try properties if direct attributes didn't work
-                if (ra is None or dec is None) and hasattr(locus, 'properties') and locus.properties:
-                    ra = ra or locus.properties.get('ra')
-                    dec = dec or locus.properties.get('dec')
-                
-                if ra is None or dec is None:
-                    if i < 5:
-                        logger.warning(f"Missing coordinates for {ztfid}: ra={ra}, dec={dec}")
-                    continue
-                
-                # Get newest alert time
-                newest_alert = 0
-                if hasattr(locus, 'properties') and locus.properties:
-                    newest_alert = locus.properties.get('newest_alert_observation_time', 0)
-                
-                objects_data.append({
-                    'ZTFID': str(ztfid),
-                    'ra': float(ra),
-                    'dec': float(dec),
-                    'newest_alert': float(newest_alert),
-                    'locus': locus  # Store the full locus for later processing
-                })
-                
-                if i < 5:
-                    logger.debug(f"Successfully processed {ztfid} at RA={ra:.4f}, Dec={dec:.4f}")
-                
-            except Exception as e:
-                if i < 10:  # Only log errors for first 10 failures
-                    logger.warning(f"Error processing locus {i+1}: {e}")
-                    logger.debug(f"Exception details: {type(e).__name__}: {str(e)}")
+        for obj in transients:
+            oid = obj['oid']
+            
+            # Convert ALeRCE OID to ZTFID format if needed
+            if not oid.startswith('ZTF'):
+                # ALeRCE uses ZTF object IDs, but might not have ZTF prefix
+                ztfid = f"ZTF{oid}" if oid.startswith('1') else oid
+            else:
+                ztfid = oid
+            
+            ra = obj.get('ra')
+            dec = obj.get('dec')
+            last_mjd = obj.get('last_mjd', 0)
+            
+            if ra is None or dec is None:
+                logger.warning(f"Missing coordinates for {ztfid}")
                 continue
+            
+            objects_data.append({
+                'ZTFID': ztfid,
+                'ra': float(ra),
+                'dec': float(dec),
+                'newest_alert': float(last_mjd),
+                'alerce_info': obj  # Store full ALeRCE info for later use
+            })
         
         if not objects_data:
-            logger.warning("No valid objects extracted from Antares results")
+            logger.warning("No valid objects with coordinates found")
             return None
         
         df = pd.DataFrame(objects_data)
-        logger.info(f"Found {len(df)} objects with recent detections")
+        logger.info(f"Successfully retrieved {len(df)} transients from ALeRCE")
+        
+        # Add status information
+        logger.info("ALeRCE Query Status:")
+        logger.info(f"• Successfully retrieved {len(df)} recent transients")
+        logger.info("• Used reliable ALeRCE API instead of problematic ANTARES")
+        logger.info("• Filtered for interesting transients (SNe, high-confidence unknowns)")
+        logger.info("• Objects ready for feature extraction")
+        
         return df
         
     except Exception as e:
-        logger.error(f"Error querying Antares: {e}")
+        logger.error(f"Error querying ALeRCE: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.info("ALeRCE Status Summary:")
+        logger.info("• ALeRCE API query failed")
+        logger.info("• New object discovery is temporarily unavailable")
+        logger.info("• Existing objects in database will continue to be processed")
+        logger.info("• Manual object addition via web interface still works")
+        logger.info("• System will automatically retry on next scheduled run")
         return None
 
 def extract_light_curve_features(timeseries: pd.DataFrame) -> Dict:
@@ -625,39 +482,59 @@ def process_object(obj_row: pd.Series) -> Optional[pd.DataFrame]:
     """
     Process a single object to extract light curve features.
     
-    This fetches the light curve from Antares and extracts features.
+    This fetches the light curve from ALeRCE and extracts features.
     """
     ztfid = obj_row.get('ZTFID', 'unknown')
     
     try:
-        # Get the locus from the object row
-        locus = obj_row.get('locus')
-        if locus is None:
-            # Try to fetch from Antares by ZTFID
-            try:
-                from antares_client.search import get_by_ztf_object_id
-                locus = get_by_ztf_object_id(ztfid)
-            except ImportError:
-                logger.error(f"antares_client not available for {ztfid}")
-                return None
-        
-        if locus is None:
-            logger.warning(f"Could not fetch locus for {ztfid}")
-            return None
-        
-        # Get timeseries data
+        # Get light curve from ALeRCE API
         timeseries_data = []
-        for alert in locus.alerts:
-            for obs in alert.observations:
-                if hasattr(obs, 'mag') and hasattr(obs, 'mjd') and hasattr(obs, 'passband'):
-                    # Only include valid detections
-                    if not np.isnan(obs.mag) and obs.mag > 0:
-                        timeseries_data.append({
-                            'ant_mjd': obs.mjd,
-                            'ant_mag': obs.mag,
-                            'ant_magerr': getattr(obs, 'magerr', 0.1),
-                            'ant_passband': obs.passband
-                        })
+        
+        # Extract OID from ZTFID for ALeRCE API
+        oid = ztfid
+        if ztfid.startswith('ZTF'):
+            # Remove ZTF prefix if present
+            oid = ztfid[3:] if len(ztfid) > 3 else ztfid
+        
+        try:
+            # Fetch light curve from ALeRCE
+            resp = requests.get(f"https://api.alerce.online/ztf/v1/objects/{oid}/lightcurve", timeout=30)
+            
+            if resp.status_code != 200:
+                logger.warning(f"ALeRCE API returned status {resp.status_code} for {ztfid}")
+                return None
+            
+            data = resp.json()
+            lc_data = data.get("detections", [])
+            
+            if not lc_data:
+                logger.warning(f"No light curve data found for {ztfid}")
+                return None
+            
+            # Convert ALeRCE format to our internal format
+            for point in lc_data:
+                # ALeRCE uses different field names
+                mjd = point.get('mjd')
+                mag = point.get('magpsf_corr') or point.get('magpsf')  # Use corrected mag if available
+                magerr = point.get('sigmapsf_corr') or point.get('sigmapsf', 0.1)  # Use corrected error if available
+                fid = point.get('fid')  # Filter ID (1=g, 2=r, 3=i)
+                
+                # Convert filter ID to passband name
+                passband_map = {1: 'g', 2: 'r', 3: 'i'}
+                passband = passband_map.get(fid, 'unknown')
+                
+                # Only include valid detections (skip non-detections)
+                if mjd and mag and not np.isnan(mag) and mag > 0 and point.get('isdiffpos', 1) != 0:
+                    timeseries_data.append({
+                        'ant_mjd': mjd,
+                        'ant_mag': mag,
+                        'ant_magerr': magerr,
+                        'ant_passband': passband
+                    })
+            
+        except (requests.exceptions.RequestException, Exception) as e:
+            logger.warning(f"Failed to fetch light curve for {ztfid}: {e}")
+            return None
         
         if not timeseries_data:
             logger.warning(f"No valid timeseries data found for {ztfid}")
@@ -674,13 +551,19 @@ def process_object(obj_row: pd.Series) -> Optional[pd.DataFrame]:
         
         # Add basic object info
         features['ZTFID'] = ztfid
-        features['ra'] = obj_row.get('ra', locus.ra)
-        features['dec'] = obj_row.get('dec', locus.dec)
+        features['ra'] = obj_row.get('ra')
+        features['dec'] = obj_row.get('dec')
+        
+        # Add latest magnitude info
+        if len(timeseries_data) > 0:
+            # Sort by MJD to get latest
+            sorted_data = sorted(timeseries_data, key=lambda x: x['ant_mjd'])
+            features['latest_magnitude'] = sorted_data[-1]['ant_mag']
         
         # Create feature errors (simplified - use 10% of feature value or default)
         feature_errors = {}
         for key, value in features.items():
-            if key in ['ZTFID', 'ra', 'dec']:
+            if key in ['ZTFID', 'ra', 'dec', 'latest_magnitude']:
                 continue
             if np.isnan(value) or value == 0:
                 feature_errors[f'{key}_err'] = np.nan
@@ -693,7 +576,7 @@ def process_object(obj_row: pd.Series) -> Optional[pd.DataFrame]:
         # Convert to DataFrame
         result_df = pd.DataFrame([all_features])
         
-        logger.info(f"Successfully processed {ztfid}")
+        logger.info(f"Successfully processed {ztfid} with {len(timeseries_data)} data points")
         return result_df
         
     except Exception as e:
@@ -747,7 +630,7 @@ def extract_features_for_recent_objects(
             if test_mode:
                 logger.info("Test mode active - no objects processed (this is expected)")
             else:
-                logger.warning("No new objects found from Antares query")
+                logger.warning("No new objects found from ALeRCE query")
             extraction_run.objects_found = 0
             extraction_run.objects_processed = 0
             extraction_run.status = "completed"

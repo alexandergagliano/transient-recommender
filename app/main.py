@@ -89,6 +89,7 @@ from .pending_votes import get_pending_objects_for_science_case, remove_pending_
 from .database import SessionLocal
 from .anomaly_service import anomaly_service
 from .filter_manager import filter_manager
+from .slack_mode_service import SlackModeService
 
 # Configure logging
 log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -125,6 +126,10 @@ templates = Jinja2Templates(directory="app/templates")
 # Initialize recommender
 feature_bank_path = os.getenv("FEATURE_BANK_PATH", "data/feature_bank.csv")
 recommender_engine = recommender.WebRecommender(feature_bank_path)
+
+# Initialize Slack mode service
+slack_csv_directory = os.getenv("SLACK_CSV_DIRECTORY", "data/slack_recommendations")
+slack_mode_service = SlackModeService(slack_csv_directory)
 
 # Security utilities
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -593,6 +598,8 @@ async def get_recommendations(
     start_ztfid: Optional[str] = None,
     realtime_mode: bool = False,
     recent_days: int = 7,
+    slack_mode: bool = False,
+    slack_lookback_days: float = 30.0,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -606,22 +613,51 @@ async def get_recommendations(
     logger.info(f"  - start_ztfid: {start_ztfid}")
     logger.info(f"  - realtime_mode: {realtime_mode}")
     logger.info(f"  - recent_days: {recent_days}")
+    logger.info(f"  - slack_mode: {slack_mode}")
+    logger.info(f"  - slack_lookback_days: {slack_lookback_days}")
     logger.info(f"  - user_id: {current_user.id}")
     
-    # Log recommender state
-    logger.info("Recommender state:")
-    logger.info(f"  - feature_bank: {recommender_engine.feature_bank is not None}")
-    logger.info(f"  - sampled_feature_bank: {recommender_engine.sampled_feature_bank is not None}")
-    logger.info(f"  - processed_features: {recommender_engine.processed_features is not None}")
-    
-    if recommender_engine.feature_bank is not None:
-        logger.info(f"  - feature_bank size: {len(recommender_engine.feature_bank)}")
-    if recommender_engine.sampled_feature_bank is not None:
-        logger.info(f"  - sampled_feature_bank size: {len(recommender_engine.sampled_feature_bank)}")
-    if recommender_engine.processed_features is not None:
-        logger.info(f"  - processed_features size: {len(recommender_engine.processed_features['ztfids'])}")
-    
     try:
+        # Handle Slack mode differently
+        if slack_mode:
+            logger.info("Using Slack mode for recommendations")
+            
+            # Get all voted objects for this user to exclude them
+            voted_objects = db.query(models.Vote.ztfid).filter(
+                models.Vote.user_id == current_user.id
+            ).distinct().all()
+            excluded_ztfids = [v[0] for v in voted_objects]
+            
+            logger.info(f"Excluding {len(excluded_ztfids)} already voted objects")
+            
+            # Get recommendations from Slack CSV files
+            recommendations = slack_mode_service.get_recommendations(
+                science_case=science_case,
+                lookback_days=slack_lookback_days,
+                excluded_ztfids=excluded_ztfids,
+                count=count,
+                start_ztfid=start_ztfid
+            )
+            
+            logger.info(f"Slack mode: returning {len(recommendations)} recommendations")
+            return recommendations
+        
+        # Otherwise use normal recommender mode
+        logger.info("Using normal recommender mode")
+        
+        # Log recommender state
+        logger.info("Recommender state:")
+        logger.info(f"  - feature_bank: {recommender_engine.feature_bank is not None}")
+        logger.info(f"  - sampled_feature_bank: {recommender_engine.sampled_feature_bank is not None}")
+        logger.info(f"  - processed_features: {recommender_engine.processed_features is not None}")
+        
+        if recommender_engine.feature_bank is not None:
+            logger.info(f"  - feature_bank size: {len(recommender_engine.feature_bank)}")
+        if recommender_engine.sampled_feature_bank is not None:
+            logger.info(f"  - sampled_feature_bank size: {len(recommender_engine.sampled_feature_bank)}")
+        if recommender_engine.processed_features is not None:
+            logger.info(f"  - processed_features size: {len(recommender_engine.processed_features['ztfids'])}")
+        
         recommendations = recommender_engine.get_recommendations(
             db, current_user.id, count, science_case,
             obs_telescope, obs_days, obs_mag_limit,
@@ -694,6 +730,20 @@ async def vote(
         logger.info(f"Removed {vote_type} vote for {ztfid} by user {current_user.id} (toggle off)")
         vote_action = "removed"
     else:
+        # IMPORTANT: Prevent having both like and dislike votes on the same object
+        if vote_type in ["like", "dislike"]:
+            # Remove the opposite vote if it exists
+            opposite_vote_type = "dislike" if vote_type == "like" else "like"
+            opposite_vote = db.query(models.Vote).filter(
+                models.Vote.user_id == current_user.id,
+                models.Vote.ztfid == ztfid,
+                models.Vote.vote_type == opposite_vote_type
+            ).first()
+            
+            if opposite_vote:
+                db.delete(opposite_vote)
+                logger.info(f"Removed opposite {opposite_vote_type} vote for {ztfid} by user {current_user.id}")
+        
         # Create new vote of this type
         new_vote = models.Vote(
             user_id=current_user.id,
@@ -1692,61 +1742,28 @@ def run_feature_extraction_manual(lookback_days: float, force_reprocess: bool):
     try:
         logger.info(f"Starting MANUAL feature extraction with lookback_days={lookback_days}, force_reprocess={force_reprocess}")
         
-        # Check if Antares is available and working
-        test_mode = True  # Default to test mode
+        # Test ALeRCE API connectivity (since we switched from ANTARES to ALeRCE)
+        test_mode = False  # Default to real mode with ALeRCE
         try:
+            import requests
             
-            # Test if Antares API is actually working with a broader query
-            logger.info("Testing Antares API connectivity...")
-            end_time = Time.now()
-            start_time = end_time - 30 * u.day  # Use 30-day test query to be more likely to find results
+            logger.info("Testing ALeRCE API connectivity...")
             
-            test_query = {
-                'query': {
-                    'bool': {
-                        'must': [
-                            {
-                                'range': {
-                                    'properties.newest_alert_observation_time': {
-                                        'gte': start_time.mjd,
-                                        'lte': end_time.mjd
-                                    }
-                                }
-                            },
-                            {
-                                'range': {
-                                    'properties.ztf_object_id': {
-                                        'gte': 'ZTF18',  # All ZTF objects
-                                        'lte': 'ZTF99'
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                },
-                'sort': [
-                    {'properties.newest_alert_observation_time': {'order': 'desc'}}
-                ],
-                'size': 10  # Small test size
-            }
+            # Quick test of ALeRCE API with a known object
+            test_response = requests.get("https://api.alerce.online/ztf/v1/objects/ZTF18aabtxvd", timeout=10)
             
-            # Try the test query with timeout
-            logger.info(f"Testing Antares query from MJD {start_time.mjd:.1f} to {end_time.mjd:.1f}")
-            test_results = search(test_query)
+            if test_response.status_code == 200:
+                logger.info("✅ ALeRCE API test successful - will use real mode for feature extraction")
+                test_mode = False
+            else:
+                logger.warning(f"⚠️ ALeRCE API test returned status {test_response.status_code} - using test mode")
+                test_mode = True
             
-            # Convert to list to check if API is responsive (this triggers the actual call)
-            test_list = list(test_results)
-            
-            test_mode = False
-            logger.info(f"Antares API test successful - found {len(test_list)} test results in 30-day window. Using real mode.")
-            logger.info(f"Will now search with user-specified lookback_days={lookback_days}")
-            
-        except ImportError as e:
-            logger.warning(f"antares_client not installed - using test mode: {e}")
         except Exception as e:
-            logger.warning(f"Antares API test failed - using test mode: {e}")
-            logger.info("This could be due to Antares server issues or network connectivity")
-            logger.info(f"Will proceed in test mode (no real objects will be processed)")
+            logger.warning(f"⚠️ ALeRCE API test failed - using test mode: {e}")
+            logger.info("This could be due to ALeRCE server issues or network connectivity")
+            logger.info("Will proceed in test mode (no real objects will be processed)")
+            test_mode = True
         
         # Get a new database session for the background task
         db = SessionLocal()
@@ -1781,61 +1798,28 @@ def run_feature_extraction_background(lookback_days: float, force_reprocess: boo
     try:
         logger.info(f"Starting background feature extraction with lookback_days={lookback_days}, force_reprocess={force_reprocess}")
         
-        # Check if Antares is available and working
-        test_mode = True  # Default to test mode
+        # Test ALeRCE API connectivity (since we switched from ANTARES to ALeRCE)
+        test_mode = False  # Default to real mode with ALeRCE
         try:
+            import requests
             
-            # Test if Antares API is actually working with a broader query
-            logger.info("Testing Antares API connectivity...")
-            end_time = Time.now()
-            start_time = end_time - 30 * u.day  # Use 30-day test query to be more likely to find results
+            logger.info("Testing ALeRCE API connectivity...")
             
-            test_query = {
-                'query': {
-                    'bool': {
-                        'must': [
-                            {
-                                'range': {
-                                    'properties.newest_alert_observation_time': {
-                                        'gte': start_time.mjd,
-                                        'lte': end_time.mjd
-                                    }
-                                }
-                            },
-                            {
-                                'range': {
-                                    'properties.ztf_object_id': {
-                                        'gte': 'ZTF18',  # All ZTF objects
-                                        'lte': 'ZTF99'
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                },
-                'sort': [
-                    {'properties.newest_alert_observation_time': {'order': 'desc'}}
-                ],
-                'size': 10  # Small test size
-            }
+            # Quick test of ALeRCE API with a known object
+            test_response = requests.get("https://api.alerce.online/ztf/v1/objects/ZTF18aabtxvd", timeout=10)
             
-            # Try the test query with timeout
-            logger.info(f"Testing Antares query from MJD {start_time.mjd:.1f} to {end_time.mjd:.1f}")
-            test_results = search(test_query)
+            if test_response.status_code == 200:
+                logger.info("✅ ALeRCE API test successful - will use real mode for feature extraction")
+                test_mode = False
+            else:
+                logger.warning(f"⚠️ ALeRCE API test returned status {test_response.status_code} - using test mode")
+                test_mode = True
             
-            # Convert to list to check if API is responsive (this triggers the actual call)
-            test_list = list(test_results)
-            
-            test_mode = False
-            logger.info(f"Antares API test successful - found {len(test_list)} test results in 30-day window. Using real mode.")
-            logger.info(f"Will now search with user-specified lookback_days={lookback_days}")
-            
-        except ImportError as e:
-            logger.warning(f"antares_client not installed - using test mode: {e}")
         except Exception as e:
-            logger.warning(f"Antares API test failed - using test mode: {e}")
-            logger.info("This could be due to Antares server issues or network connectivity")
-            logger.info(f"Will proceed in test mode (no real objects will be processed)")
+            logger.warning(f"⚠️ ALeRCE API test failed - using test mode: {e}")
+            logger.info("This could be due to ALeRCE server issues or network connectivity")
+            logger.info("Will proceed in test mode (no real objects will be processed)")
+            test_mode = True
         
         # Get a new database session for the background task
         db = SessionLocal()
@@ -2011,6 +1995,19 @@ async def get_extraction_progress(
         ],
         "current_step": min(5, int(progress_percentage / 20))  # 0-5 based on progress
     }
+
+@api_app.get("/slack-csv-status")
+async def get_slack_csv_status(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get the status of Slack CSV files."""
+    try:
+        status = slack_mode_service.check_csv_status()
+        return status
+    except Exception as e:
+        logger.error(f"Error checking Slack CSV status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_app.get("/extraction-status")
 async def get_extraction_status(
