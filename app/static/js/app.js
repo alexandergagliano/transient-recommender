@@ -3392,6 +3392,9 @@ async function checkDemoAvailability() {
         
         console.log('✅ Confirmed on recommendations page, proceeding with demo check');
         
+        // First check if user has completed the demo
+        await checkDemoButtonVisibility();
+        
         // Quick check without waiting for authentication
         const response = await fetch('/api/demo/should-show');
         console.log('📡 Demo API response status:', response.status);
@@ -3434,6 +3437,53 @@ async function checkDemoAvailability() {
             console.log('🎯 Starting instant fallback demo...');
             startDemoInstant();
         }, 500);
+    }
+}
+
+// Check if user has completed demo and show/hide button accordingly
+async function checkDemoButtonVisibility() {
+    try {
+        console.log('🔍 Checking demo button visibility...');
+        
+        const demoButton = document.getElementById('startDemoButton');
+        if (!demoButton) {
+            console.log('No demo button found');
+            return;
+        }
+        
+        const response = await fetch('/api/demo/completed');
+        console.log('📡 Demo completion API response status:', response.status);
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                // User not authenticated - show demo button for potential new users
+                console.log('User not authenticated, showing demo button');
+                demoButton.style.display = 'block';
+                return;
+            }
+            console.error('❌ Demo completion API request failed:', response.status, response.statusText);
+            // Default to showing button on error
+            demoButton.style.display = 'block';
+            return;
+        }
+        
+        const data = await response.json();
+        console.log('Demo completion response:', data);
+        
+        if (data.demo_completed) {
+            console.log('✅ User has completed demo, hiding button');
+            demoButton.style.display = 'none';
+        } else {
+            console.log('❌ User has not completed demo, showing button');
+            demoButton.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('❌ Demo button visibility check failed:', error);
+        // Default to showing button on error
+        const demoButton = document.getElementById('startDemoButton');
+        if (demoButton) {
+            demoButton.style.display = 'block';
+        }
     }
 }
 
@@ -4512,6 +4562,13 @@ function setupStepByStepDemoInteractions(demoObjects, skillLevel = 'expert') {
         try {
             // Mark demo as completed
             await fetch('/api/demo/complete', { method: 'POST' });
+            
+            // Hide the demo button since user has completed it
+            const demoButton = document.getElementById('startDemoButton');
+            if (demoButton) {
+                demoButton.style.display = 'none';
+                console.log('✅ Demo button hidden after completion');
+            }
             
             // Close modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('demoModal'));

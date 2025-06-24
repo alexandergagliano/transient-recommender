@@ -436,8 +436,8 @@ class WebRecommender:
                         nearest_seed = None
                         
                         for seed_ztf in seeds:
-                    seed_idx = np.where(self.processed_features['ztfids'] == seed_ztf)[0]
-                    if len(seed_idx) > 0:
+                            seed_idx = np.where(self.processed_features['ztfids'] == seed_ztf)[0]
+                            if len(seed_idx) > 0:
                                 seed_features = self.processed_features['X_scaled'][seed_idx[0]]
                                 dist = np.linalg.norm(obj_features - seed_features)
                                 if dist < min_seed_dist:

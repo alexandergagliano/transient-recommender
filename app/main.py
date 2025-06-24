@@ -3176,6 +3176,36 @@ async def get_explanation(
         logger.error(f"Error generating explanation for {ztfid}: {e}", exc_info=True)
         return {"explanation": f"Recommended for {science_case} science case"}
 
+@api_app.get("/demo/completed")
+async def check_demo_completed(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Check if the user has completed the demo."""
+    try:
+        # Check if user has a DEMO_COMPLETED vote
+        demo_completed_vote = db.query(models.Vote).filter(
+            models.Vote.user_id == current_user.id,
+            models.Vote.ztfid == "DEMO_COMPLETED"
+        ).first()
+        
+        is_completed = demo_completed_vote is not None
+        
+        logger.info(f"Demo completion check for {current_user.username}: {is_completed}")
+        
+        return {
+            'demo_completed': is_completed,
+            'completion_date': demo_completed_vote.created_at.isoformat() if demo_completed_vote else None
+        }
+    except Exception as e:
+        logger.error(f"Error checking demo completion for user {current_user.username}: {e}")
+        # Default to not completed on error
+        return {
+            'demo_completed': False,
+            'completion_date': None,
+            'error': 'Error checking demo completion'
+        }
+
 # Mount the API app after all routes are defined
 app.mount("/api", api_app)
 
