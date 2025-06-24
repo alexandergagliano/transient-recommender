@@ -34,12 +34,12 @@ class SlackModeService:
         """Get the path to the CSV file for a given science case."""
         # Map science cases to CSV filenames
         filename_map = {
-            "snia-like": "snia_recommendations.csv",
-            "ccsn-like": "ccsn_recommendations.csv", 
-            "long-lived": "longlived_recommendations.csv",
-            "anomalous": "anomalous_recommendations.csv",
-            "precursor": "precursor_recommendations.csv",
-            "all": "all_recommendations.csv"
+            "snia-like": "snia-like.csv",
+            "ccsn-like": "ccsn-like.csv", 
+            "long-lived": "long-lived.csv",
+            "anomalous": "anomalous.csv",
+            "precursor": "precursor.csv",
+            "all": "all.csv"
         }
         
         filename = filename_map.get(science_case, f"{science_case}_recommendations.csv")
@@ -148,8 +148,9 @@ class SlackModeService:
         recommendations = []
         for _, row in result_df.iterrows():
             # Handle ZTFID - ensure it has the ZTF prefix
+            # Accept both ZTF and ANTARES IDs
             ztfid = str(row['ztfid'])
-            if not ztfid.startswith('ZTF'):
+            if not ztfid.startswith('ZTF') and not ztfid.startswith('ANT'):
                 ztfid = f'ZTF{ztfid}'
             
             rec = {
