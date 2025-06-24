@@ -122,8 +122,9 @@ class SlackModeService:
         
         logger.info(f"Filtering recommendations: current_mjd={current_mjd:.2f}, cutoff_mjd={cutoff_mjd:.2f}, lookback_days={lookback_days}")
         
-        # Filter by lookback period
-        mask = df['recommendation_mjd'] >= cutoff_mjd
+        # Filter by lookback period - use timestamp column if available
+        date_column = 'timestamp' if 'timestamp' in df.columns else 'recommendation_mjd'
+        mask = df[date_column] >= cutoff_mjd
         filtered_df = df[mask].copy()
         
         logger.info(f"Found {len(filtered_df)} recommendations within {lookback_days} days")
@@ -141,7 +142,9 @@ class SlackModeService:
             logger.info(f"Starting from {start_ztfid}, {len(filtered_df)} recommendations remaining")
         
         # Sort by recommendation date (newest first) and take requested count
-        filtered_df = filtered_df.sort_values('recommendation_mjd', ascending=False)
+        # Use timestamp column if available
+        sort_column = 'timestamp' if 'timestamp' in filtered_df.columns else 'recommendation_mjd'
+        filtered_df = filtered_df.sort_values(sort_column, ascending=False)
         result_df = filtered_df.head(count)
         
         # Convert to list of dictionaries
@@ -153,10 +156,13 @@ class SlackModeService:
             if not ztfid.startswith('ZTF') and not ztfid.startswith('ANT'):
                 ztfid = f'ZTF{ztfid}'
             
+            # Use timestamp column if available, otherwise fall back to recommendation_mjd
+            mjd_value = float(row['timestamp']) if 'timestamp' in row and pd.notna(row['timestamp']) else float(row['recommendation_mjd'])
+            
             rec = {
                 'ZTFID': ztfid,
                 'science_case': science_case,
-                'recommendation_mjd': float(row['recommendation_mjd']),
+                'recommendation_mjd': mjd_value,
                 'is_slack_mode': True  # Flag to indicate this is from Slack mode
             }
             
@@ -185,12 +191,17 @@ class SlackModeService:
                     stat = os.stat(csv_path)
                     df = self._load_csv(science_case)
                     
+                    # Determine which date column to use for latest recommendation
+                    date_col = 'timestamp' if 'timestamp' in df.columns else 'recommendation_mjd'
+                    latest_mjd = float(df[date_col].max()) if not df.empty and date_col in df.columns else None
+                    
                     status[science_case] = {
                         'exists': True,
                         'last_modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
                         'file_size_kb': stat.st_size / 1024,
                         'total_recommendations': len(df) if not df.empty else 0,
-                        'latest_recommendation_mjd': float(df['recommendation_mjd'].max()) if not df.empty and 'recommendation_mjd' in df.columns else None
+                        'latest_recommendation_mjd': latest_mjd,
+                        'date_column_used': date_col
                     }
                 except Exception as e:
                     logger.error(f"Error checking status for {science_case}: {e}")
