@@ -230,10 +230,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Setup target button functionality
     setupTargetModal();
 
-        // Check if demo should be shown (instant for new users) - DISABLED FOR TESTING
-    // setTimeout(() => {
-    // checkDemoAvailability();
-    // }, 50); // Very short delay to let page finish loading
+        // Check if demo should be shown (instant for new users)
+    setTimeout(() => {
+        checkDemoAvailability();
+    }, 50); // Very short delay to let page finish loading
     
     // Request notification permissions for feature extraction alerts
     requestNotificationPermission();
