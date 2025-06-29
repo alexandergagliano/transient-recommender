@@ -67,8 +67,13 @@ class ALeRCEFetcher:
         return self._to_mjd(start), self._to_mjd(now)
 
     def _to_mjd(self, dt):
-        """Convert datetime to MJD"""
-        return dt.timestamp() / 86400.0 + 40587
+        """Convert datetime to MJD using astropy for accuracy"""
+        try:
+            from astropy.time import Time
+            return Time(dt).mjd
+        except ImportError:
+            # Fallback to manual calculation if astropy not available
+            return dt.timestamp() / 86400.0 + 40587
 
     def fetch_recent_oids(self):
         """Quickly fetch all unique object IDs with detections in the date range."""
@@ -95,7 +100,8 @@ class ALeRCEFetcher:
                     break
                     
                 data = resp.json()
-                results = data.get("results", [])
+                # ALeRCE API now uses 'items' instead of 'results'
+                results = data.get("items", data.get("results", []))
                 if not results:
                     self.logger.info(f"No more results at page {page}")
                     break
@@ -134,10 +140,14 @@ class ALeRCEFetcher:
                 'oid': oid,
                 'ra': data.get('meanra'),
                 'dec': data.get('meandec'),
-                'classification': data.get('classifier', {}),
+                'classification': {
+                    'classifier': data.get('classifier') or data.get('class'),
+                    'probability': data.get('probability')
+                },
                 'n_detections': data.get('ndet', 0),
                 'first_mjd': data.get('firstmjd'),
-                'last_mjd': data.get('lastmjd')
+                'last_mjd': data.get('lastmjd'),
+                'stellar': data.get('stellar', False)
             }
             
             return info
@@ -150,31 +160,46 @@ class ALeRCEFetcher:
         """
         Determine if object is an interesting transient for our purposes.
         Focus on supernovae and other transients, skip variables.
+        Updated to be less restrictive since many objects lack classification.
         """
         if not obj_info:
             return False
             
         classification = obj_info.get('classification', {})
         classifier = classification.get('classifier', '')
+        prob = classification.get('probability', 0)
         
-        # Accept SN classifications
-        if classifier in ['SN', 'SNIa', 'SNIbc', 'SNII']:
+        # Require minimum number of detections
+        n_det = obj_info.get('n_detections', 0)
+        if n_det < 5:
+            return False
+            
+        # Skip obvious variables (if classified)
+        if classifier in ['Variable', 'Periodic', 'RRLyr', 'EclBin', 'CV', 'AGN']:
+            return False
+        
+        # Skip stellar objects (if marked as stellar)
+        if obj_info.get('stellar', False):
+            return False
+            
+        # Accept explicitly good classifications
+        if classifier in ['SN', 'SNIa', 'SNIbc', 'SNII', 'SNIIn']:
             return True
             
         # Accept high-confidence transient classifications
-        prob = classification.get('probability', 0)
         if classifier in ['Transient', 'Unknown'] and prob > 0.7:
             return True
-            
-        # Require minimum number of detections
-        if obj_info.get('n_detections', 0) < 5:
-            return False
-            
-        # Skip obvious variables
-        if classifier in ['Variable', 'Periodic', 'RRLyr', 'EclBin']:
-            return False
-            
-        return True
+        
+        # For objects without classification (classifier is None or empty),
+        # accept if they have reasonable number of detections and aren't marked as stellar
+        if not classifier or classifier in ['', 'None']:
+            # More lenient acceptance for unclassified objects with good detection count
+            if n_det >= 10:  # Well-observed objects
+                return True
+            elif n_det >= 5:  # Accept with basic detection threshold
+                return True
+                
+        return False
 
     def get_recent_transients(self):
         """
