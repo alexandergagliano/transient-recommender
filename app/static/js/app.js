@@ -3594,15 +3594,70 @@ async function startDemoInstant() {
 function showSkillLevelSelection() {
     console.log('🎯 showSkillLevelSelection function called');
     
-    // Simple test first - just show an alert with buttons
-    const userChoice = confirm('Demo Skill Level:\n\nOK = I\'m new to time-domain astrophysics\nCancel = I study time-domain astrophysics professionally');
+    // Create styled modal for skill level selection
+    const modalHtml = `
+        <div class="modal fade" id="skillLevelModal" tabindex="-1" role="dialog" aria-labelledby="skillLevelModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title" id="skillLevelModalLabel">
+                            <i class="fas fa-graduation-cap mr-2"></i>Choose Your Experience Level
+                        </h5>
+                    </div>
+                    <div class="modal-body text-center py-4">
+                        <p class="lead mb-4">This will customize the demo content for your background:</p>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <button type="button" class="btn btn-outline-info btn-lg btn-block h-100" id="beginnerBtn">
+                                    <div class="py-2">
+                                        <i class="fas fa-user-graduate fa-2x mb-2"></i>
+                                        <h6>Beginner</h6>
+                                        <small class="text-muted">New to time-domain astrophysics</small>
+                                    </div>
+                                </button>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <button type="button" class="btn btn-outline-primary btn-lg btn-block h-100" id="expertBtn">
+                                    <div class="py-2">
+                                        <i class="fas fa-user-astronaut fa-2x mb-2"></i>
+                                        <h6>Professional</h6>
+                                        <small class="text-muted">I study time-domain professionally</small>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
     
-    const skillLevel = userChoice ? 'beginner' : 'expert';
-    console.log(`🎯 User selected skill level: ${skillLevel}`);
-    alert(`You selected: ${skillLevel} level. Starting demo...`);
+    // Remove any existing modal
+    $('#skillLevelModal').remove();
     
-    // Start demo with selected level
-    startDemoWithLevel(skillLevel);
+    // Add modal to page
+    $('body').append(modalHtml);
+    
+    // Add event handlers
+    $('#beginnerBtn').click(function() {
+        console.log('🎯 User selected: beginner');
+        $('#skillLevelModal').modal('hide');
+        showToast('Starting beginner-level demo...', 'info', 2000);
+        setTimeout(() => startDemoWithLevel('beginner'), 500);
+    });
+    
+    $('#expertBtn').click(function() {
+        console.log('🎯 User selected: expert');
+        $('#skillLevelModal').modal('hide');
+        showToast('Starting professional-level demo...', 'info', 2000);
+        setTimeout(() => startDemoWithLevel('expert'), 500);
+    });
+    
+    // Show the modal
+    $('#skillLevelModal').modal('show');
 }
 
 function startDemoWithLevel(skillLevel) {

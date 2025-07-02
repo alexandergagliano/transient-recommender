@@ -682,9 +682,14 @@ def extract_features_for_recent_objects(
                 objects_to_process.append(obj)
                 logger.debug(f"New object: {ztfid}")
             elif force_reprocess or (today_mjd - existing_ztfids[ztfid]) > 2:
-                # Existing object but features are stale (>2 days old)
+                # Existing object but features are stale (>2 days old) or force reprocess
                 objects_to_process.append(obj)
-                logger.debug(f"Stale features for: {ztfid}")
+                logger.debug(f"Stale features for: {ztfid} (age: {today_mjd - existing_ztfids[ztfid]:.1f} days)")
+            elif lookback_days >= 7:  # For longer lookbacks, be more permissive
+                # For manual longer extractions, also reprocess if features are >0.5 days old
+                if (today_mjd - existing_ztfids[ztfid]) > 0.5:
+                    objects_to_process.append(obj)
+                    logger.debug(f"Manual long extraction - refreshing features for: {ztfid} (age: {today_mjd - existing_ztfids[ztfid]:.1f} days)")
         
         logger.info(f"Processing features for {len(objects_to_process)} objects")
         
