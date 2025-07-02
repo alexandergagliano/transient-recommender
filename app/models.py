@@ -116,6 +116,7 @@ class FeatureBank(Base):
     ra = Column(Float)
     dec = Column(Float)
     latest_magnitude = Column(Float, nullable=True)
+    last_detection_mjd = Column(Float, nullable=True)  # MJD of last detection for real-time filtering
     features = Column(JSON)  # Store computed features as JSON
     feature_errors = Column(JSON)  # Store feature errors as JSON
     processed_features = Column(JSON, nullable=True)  # Store preprocessed/scaled features

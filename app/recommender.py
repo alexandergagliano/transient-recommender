@@ -631,7 +631,7 @@ class WebRecommender:
                 
                 logger.info(f"Real-time mode: filtering to objects with detections after {cutoff_date.strftime('%Y-%m-%d %H:%M:%S')} (MJD {cutoff_mjd:.3f})")
                 
-                # Check if we have last detection date info - try different possible column names
+                # Check if we have last detection date info - prioritize last_detection_mjd
                 detection_date_col = None
                 possible_cols = ['last_detection_mjd', 'latest_detection_mjd', 'last_mjd', 'mjd_max', 'mjdmax', 'newest_alert', 'oldest_alert', 'mjd_extracted', 'peak_phase']
                 

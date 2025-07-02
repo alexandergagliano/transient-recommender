@@ -579,16 +579,17 @@ def process_object(obj_row: pd.Series) -> Optional[pd.DataFrame]:
         features['ra'] = obj_row.get('ra')
         features['dec'] = obj_row.get('dec')
         
-        # Add latest magnitude info
+        # Add latest magnitude and detection date info
         if len(timeseries_data) > 0:
             # Sort by MJD to get latest
             sorted_data = sorted(timeseries_data, key=lambda x: x['ant_mjd'])
             features['latest_magnitude'] = sorted_data[-1]['ant_mag']
+            features['last_detection_mjd'] = sorted_data[-1]['ant_mjd']  # Add last detection date for real-time filtering
         
         # Create feature errors (simplified - use 10% of feature value or default)
         feature_errors = {}
         for key, value in features.items():
-            if key in ['ZTFID', 'ra', 'dec', 'latest_magnitude']:
+            if key in ['ZTFID', 'ra', 'dec', 'latest_magnitude', 'last_detection_mjd']:
                 continue
             if np.isnan(value) or value == 0:
                 feature_errors[f'{key}_err'] = np.nan
@@ -742,6 +743,7 @@ def extract_features_for_recent_objects(
                             existing_obj.ra = feature_row['ra']
                             existing_obj.dec = feature_row['dec']
                             existing_obj.latest_magnitude = feature_row.get('latest_magnitude')
+                            existing_obj.last_detection_mjd = feature_row.get('last_detection_mjd')
                             existing_obj.mjd_extracted = today_mjd
                             existing_obj.last_updated = datetime.utcnow()
                         else:
@@ -751,6 +753,7 @@ def extract_features_for_recent_objects(
                                 ra=feature_row['ra'],
                                 dec=feature_row['dec'],
                                 latest_magnitude=feature_row.get('latest_magnitude'),
+                                last_detection_mjd=feature_row.get('last_detection_mjd'),
                                 features=features_dict,
                                 feature_errors=errors_dict,
                                 mjd_extracted=today_mjd
