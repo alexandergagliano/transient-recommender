@@ -697,33 +697,43 @@ async function loadRecommendations() {
                     objectDisplay.style.display = 'none';
                 }
                 
-                // Show constraint info in the main area
-                const mainContent = document.querySelector('.recommendation-content') || document.querySelector('.container');
-                if (mainContent) {
+                // Show constraint info at the top of the page (after title row)
+                const containerFluid = document.querySelector('.container-fluid');
+                if (containerFluid) {
                     const constraintInfo = document.createElement('div');
                     constraintInfo.className = 'no-objects-message alert alert-warning';
                     constraintInfo.innerHTML = `
-                        <h4><i class="fas fa-filter"></i> No Objects Match Your Constraints</h4>
-                        <p>${errorInfo.message}</p>
-                        ${errorInfo.suggestions && errorInfo.suggestions.length > 0 ? `
-                            <h6>Suggestions:</h6>
-                            <ul>
-                                ${errorInfo.suggestions.map(s => `<li>${s}</li>`).join('')}
-                            </ul>
-                        ` : ''}
-                        <button class="btn btn-primary mt-2" onclick="clearConstraints()">
-                            <i class="fas fa-times"></i> Clear All Constraints
-                        </button>
+                        <div class="row">
+                            <div class="col-12">
+                                <h4><i class="fas fa-filter"></i> No Objects Match Your Constraints</h4>
+                                <p>${errorInfo.message}</p>
+                                ${errorInfo.suggestions && errorInfo.suggestions.length > 0 ? `
+                                    <h6>Suggestions:</h6>
+                                    <ul>
+                                        ${errorInfo.suggestions.map(s => `<li>${s}</li>`).join('')}
+                                    </ul>
+                                ` : ''}
+                                <button class="btn btn-primary mt-2" onclick="clearConstraints()">
+                                    <i class="fas fa-times"></i> Clear All Constraints
+                                </button>
+                            </div>
+                        </div>
                     `;
                     
                     // Remove any existing no-objects message
-                    const existingMessage = mainContent.querySelector('.no-objects-message');
+                    const existingMessage = containerFluid.querySelector('.no-objects-message');
                     if (existingMessage) {
                         existingMessage.remove();
                     }
                     
-                    // Insert at the beginning
-                    mainContent.insertBefore(constraintInfo, mainContent.firstChild);
+                    // Insert after the first row (title row) but before mode selection
+                    const firstRow = containerFluid.querySelector('.row');
+                    if (firstRow && firstRow.nextElementSibling) {
+                        containerFluid.insertBefore(constraintInfo, firstRow.nextElementSibling);
+                    } else {
+                        // Fallback: insert at the beginning if we can't find the right position
+                        containerFluid.insertBefore(constraintInfo, containerFluid.firstChild);
+                    }
                 }
                 
                 return;
