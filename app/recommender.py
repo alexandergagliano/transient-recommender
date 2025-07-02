@@ -349,9 +349,15 @@ class WebRecommender:
             db.rollback()
             logger.error(f"Error updating feature bank: {e}")
     
-    def get_user_votes(self, db: Session, user_id: int) -> Tuple[List[str], List[str], List[str], List[str]]:
-        """Get the user's votes."""
-        votes = db.query(models.Vote).filter(models.Vote.user_id == user_id).all()
+    def get_user_votes(self, db: Session, user_id: int, science_case: Optional[str] = None) -> Tuple[List[str], List[str], List[str], List[str]]:
+        """Get the user's votes, optionally filtered by science case."""
+        query = db.query(models.Vote).filter(models.Vote.user_id == user_id)
+        
+        # Filter by science case if provided
+        if science_case and science_case != "all":
+            query = query.filter(models.Vote.science_case == science_case)
+            
+        votes = query.all()
         
         liked = [vote.ztfid for vote in votes if vote.vote_type == "like"]
         disliked = [vote.ztfid for vote in votes if vote.vote_type == "dislike"]
@@ -360,12 +366,18 @@ class WebRecommender:
         
         return liked, disliked, targets, skipped
     
-    def get_user_positive_preference_history(self, db: Session, user_id: int) -> List[models.Vote]:
-        """Get user's like and target votes, ordered by most recent."""
-        return db.query(models.Vote).filter(
+    def get_user_positive_preference_history(self, db: Session, user_id: int, science_case: Optional[str] = None) -> List[models.Vote]:
+        """Get user's like and target votes, optionally filtered by science case, ordered by most recent."""
+        query = db.query(models.Vote).filter(
             models.Vote.user_id == user_id,
             models.Vote.vote_type.in_(["like", "target"])
-        ).order_by(desc(models.Vote.last_updated)).all()
+        )
+        
+        # Filter by science case if provided
+        if science_case and science_case != "all":
+            query = query.filter(models.Vote.science_case == science_case)
+            
+        return query.order_by(desc(models.Vote.last_updated)).all()
     
     def generate_recommendation_explanation(self, db: Session, ztfid: str, user_id: int, science_case: str) -> str:
         """
@@ -583,7 +595,7 @@ class WebRecommender:
             logger.info(f"Feature bank status - feature_bank: {self.feature_bank is not None}, sampled_feature_bank: {self.sampled_feature_bank is not None}, processed_features: {self.processed_features is not None}")
             
             # Get user votes
-            liked, disliked, targets, skipped = self.get_user_votes(db, user_id)
+            liked, disliked, targets, skipped = self.get_user_votes(db, user_id, science_case)
             excluded_ids = set(liked + disliked + skipped)
             
             logger.info(f"User has voted on {len(excluded_ids)} objects: {len(liked)} liked, {len(disliked)} disliked, {len(skipped)} skipped")
@@ -795,7 +807,7 @@ class WebRecommender:
             
             if query_vector is None:
                 # Try user's most recent like/target
-                positive_votes = self.get_user_positive_preference_history(db, user_id)
+                positive_votes = self.get_user_positive_preference_history(db, user_id, science_case)
                 for vote in positive_votes:
                     if vote.ztfid not in excluded_ids:
                         query_idx = np.where(ztfids == vote.ztfid)[0]
